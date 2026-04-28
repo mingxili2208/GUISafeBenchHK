@@ -1,0 +1,36 @@
+# ─── Runtime outputs ───────────────────────────────────────────────────────────
+log/
+video/
+
+# Local backup / reference copy (1.4 GB, not needed for normal usage)
+SafeBenchHK-bp/
+
+# GUI Console runtime state (experiments, jobs, supervisor, app_state)
+gui_console/runtime/
+
+# ─── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Python package build artifacts
+*.egg-info/
+*.egg
+dist/
+build/
+
+# ─── Node.js (GUI frontend) ────────────────────────────────────────────────────
+gui_console/frontend/node_modules/
+gui_console/frontend/dist/
+
+# ─── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+
+# ─── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Model checkpoints (tracked via Git LFS, see .gitattributes) ──────────────
+# Intentionally NOT ignored — handled by Git LFS

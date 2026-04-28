@@ -1,0 +1,12 @@
+map: TsimShaTsui-1029-3
+scenario: 1
+
+# Relative paths are resolved from this yaml file's directory.
+origin_dir: scenario_origin/TsimShaTsui-1029-3
+save_dir: scenario_data/TsimShaTsui-1029-3
+
+# standard | adv | both
+format: standard
+
+# When false, export.py removes orphan routes and renumbers route/scenario pairs.
+skip_cleanup: false

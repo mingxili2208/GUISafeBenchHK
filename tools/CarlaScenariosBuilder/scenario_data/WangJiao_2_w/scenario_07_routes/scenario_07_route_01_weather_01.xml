@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='utf-8'?>
+<routes>
+  <route id="1" town="WangJiao_2_w">
+    <weather cloudiness="5.0" dust_storm="0.0" fog_density="2.0" fog_distance="0.75" fog_falloff="0.10000000149011612" mie_scattering_scale="0.029999999329447746" precipitation="0.0" precipitation_deposits="0.0" rayleigh_scattering_scale="0.03310000151395798" scattering_intensity="1.0" sun_altitude_angle="45.0" sun_azimuth_angle="-1.0" wetness="0.0" wind_intensity="10.0" />
+    <waypoint pitch="360.00" roll="0.00" x="-376.89" y="-371.57" yaw="78.76" z="0.00" />
+    <waypoint pitch="360.00" roll="0.00" x="-373.77" y="-355.88" yaw="78.76" z="0.00" />
+    <waypoint pitch="360.00" roll="0.00" x="-370.26" y="-338.21" yaw="78.76" z="0.00" />
+    <waypoint pitch="360.00" roll="0.00" x="-368.06" y="-332.38" yaw="41.25" z="0.00" />
+    <waypoint pitch="0.00" roll="0.00" x="-371.69" y="-319.55" yaw="168.90" z="0.00" />
+    <waypoint pitch="0.00" roll="0.00" x="-379.54" y="-318.01" yaw="168.90" z="0.00" />
+    <waypoint pitch="0.00" roll="0.00" x="-381.22" y="-317.68" yaw="168.90" z="0.00" />
+    <waypoint pitch="0.00" roll="0.00" x="-396.92" y="-314.60" yaw="168.90" z="0.00" />
+  </route>
+</routes>

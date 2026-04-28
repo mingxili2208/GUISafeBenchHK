@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<routes>
+  <route id="7" town="14C_2">
+    <weather cloudiness="-1.0" dust_storm="0.0" fog_density="-1.0" fog_distance="-1.0" fog_falloff="-1.0" mie_scattering_scale="0.029999999329447746" precipitation="-1.0" precipitation_deposits="-1.0" rayleigh_scattering_scale="0.03310000151395798" scattering_intensity="1.0" sun_altitude_angle="-1.0" sun_azimuth_angle="-1.0" wetness="-1.0" wind_intensity="-1.0" />
+    <waypoint pitch="0.00" roll="0.00" x="8.22" y="-68.82" yaw="-88.59" z="2.00" />
+    <waypoint pitch="0.00" roll="0.00" x="8.81" y="-92.81" yaw="-88.59" z="2.00" />
+    <waypoint pitch="0.00" roll="0.00" x="9.21" y="-108.81" yaw="-88.59" z="2.00" />
+    <waypoint pitch="0.00" roll="0.00" x="9.58" y="-123.74" yaw="-448.59" z="2.00" />
+    <waypoint pitch="0.00" roll="0.00" x="10.16" y="-145.43" yaw="265.55" z="2.00" />
+    <waypoint pitch="0.00" roll="0.00" x="7.29" y="-172.92" yaw="-88.59" z="2.00" />
+  </route>
+</routes>

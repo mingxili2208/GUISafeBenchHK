@@ -1,0 +1,33 @@
+{
+  "available_scenarios": [
+    {
+      "Town10HD_Opt": [
+        {
+          "available_event_configurations": [
+            {
+              "other_actors": {
+                "left": [
+                  {
+                    "pitch": "0.00",
+                    "x": "15.80",
+                    "y": "137.44",
+                    "yaw": "0.56",
+                    "z": "2.00"
+                  }
+                ]
+              },
+              "transform": {
+                "pitch": "0.00",
+                "x": "7.79",
+                "y": "137.30",
+                "yaw": "1.09",
+                "z": "2.00"
+              }
+            }
+          ],
+          "scenario_name": "DynamicObjectCrossing"
+        }
+      ]
+    }
+  ]
+}

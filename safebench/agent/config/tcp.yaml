@@ -1,0 +1,13 @@
+# TCP (Trajectory-guided Control Prediction) 端到端自动驾驶算法配置
+# 模型实现在 agent/tcp.py 中
+
+policy_type: 'tcp'
+model_path: 'safebench/agent/model_ckpt/tcp/best_model.ckpt'
+obs_type: 3  # 使用前视图+状态
+
+# TCP是预训练模型，不需要在线训练
+train_episode: 0
+eval_in_train_freq: 1
+save_freq: 10
+buffer_capacity: 10000
+buffer_start_training: 100

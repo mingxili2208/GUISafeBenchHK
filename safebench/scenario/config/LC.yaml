@@ -1,0 +1,37 @@
+#scenario_type_dir: 'safebench/scenario/config/scenario_type'
+#scenario_type: 'adv_init_state.json'
+#scenario_category: 'planning'
+scenario_type_dir: 'safebench/scenario/scenario_data/14C_2'
+#scenario_type_dir: 'safebench/scenario/scenario_data/center'
+#scenario_type: 'adv_scenario_08.json'  # json文件,定义了功能场景的类型,包括了场景的索引id,功能场景类别,发生在哪一个Route id上
+scenario_type: 'standard_scenario_01.json'
+scenario_category: 'planning'
+policy_type: 'lc'
+
+#route_dir: 'safebench/scenario/scenario_data/route'c
+#scenario_id: 1
+#route_id: null
+#route_dir: 'safebench/scenario/scenario_data/center'
+route_dir: 'safebench/scenario/scenario_data/14C_2'
+scenario_id: null
+route_id: null
+
+
+ego_action_dim: 2
+ego_state_dim: 4
+ego_action_limit: 1.0
+
+# 遗传算法相关配置
+use_genetic_algorithm: true
+genetic_population_size: 30
+genetic_generations: 20
+
+# for REINFORCE policy model
+model_path: 'safebench/scenario/scenario_data/model_ckpt/mylc'
+model_id: 2  # model's name to save
+buffer_capacity: 100
+batch_size: 32  # initial 32
+lr: 0.001
+eval_in_train_freq: 10
+save_freq: 10 # initial 10
+train_episode: 500  # initial 1000

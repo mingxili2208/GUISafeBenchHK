@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<routes>
+  <route id="15" town="center">
+    <weather cloudiness="100.0" dust_storm="0.0" fog_density="7.0" fog_distance="0.75" fog_falloff="0.10000000149011612" mie_scattering_scale="0.029999999329447746" precipitation="100.0" precipitation_deposits="90.0" rayleigh_scattering_scale="0.03310000151395798" scattering_intensity="1.0" sun_altitude_angle="15.0" sun_azimuth_angle="-1.0" wetness="0.0" wind_intensity="100.0" />
+    <waypoint pitch="-0.27" roll="0.00" x="-181.24" y="164.40" yaw="-168.72" z="9.08" />
+    <waypoint pitch="-0.27" roll="0.00" x="-188.88" y="162.55" yaw="-164.12" z="9.05" />
+    <waypoint pitch="-0.26" roll="0.00" x="-196.55" y="160.31" yaw="-163.69" z="9.01" />
+    <waypoint pitch="-1.74" roll="0.00" x="-204.24" y="158.07" yaw="-164.04" z="8.92" />
+    <waypoint pitch="-1.62" roll="0.00" x="-211.22" y="155.53" yaw="-146.54" z="8.59" />
+    <waypoint pitch="-0.47" roll="0.00" x="-215.60" y="150.12" yaw="-116.05" z="8.49" />
+    <waypoint pitch="-0.47" roll="0.00" x="-218.64" y="142.45" yaw="-107.21" z="8.42" />
+    <waypoint pitch="-0.47" roll="0.00" x="-221.63" y="134.50" yaw="-125.04" z="8.35" />
+    <waypoint pitch="-0.47" roll="0.00" x="-228.81" y="129.29" yaw="-158.64" z="8.28" />
+  </route>
+</routes>
