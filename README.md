@@ -71,40 +71,49 @@ pip install /path/to/carla/PythonAPI/carla/dist/carla-*-cp38-cp38-linux_x86_64.w
 pip install -r gui_console/backend/requirements.txt
 
 # 前端 Node.js 依赖
-sudo apt install npm
+# ⚠️ 不要使用 sudo apt install nodejs/npm，Ubuntu 系统源中的 Node.js 版本过低（通常 12.x），
+# Vite 5 要求 Node.js 18+，请用以下方式安装：
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.bashrc   # 或重新打开终端使 nvm 生效
+nvm install 20
+nvm use 20
+
 cd gui_console/frontend && npm install && cd ../..
 ```
 
 ## 快速上手
 
-### 前提：启动 CARLA
+> **说明**：完整跑一次评测需要 CARLA 已启动、场景数据和配置就位等多项前置条件，不适合作为首次验证手段。推荐先用 GUI 控制台验证整体环境是否搭建正确，再按手册流程逐步配置实验。
 
-本仓库不会自动启动 CARLA，需要先在本机或远端启动 CARLA Server，默认端口 `2000`（Traffic Manager `8000`）。
+### 第 1 步：启动 CARLA
 
-### 运行第一次评测
+本仓库不会自动启动 CARLA，需要先在本机启动 CARLA Server，默认端口 `2000`（Traffic Manager `8000`）。
 
-以下命令使用内置的 `behavior` 策略和 `standard.yaml` 场景配置跑一次评测，不开渲染窗口、不保存视频，适合快速验证环境是否配置正确：
+### 第 2 步：启动 GUI 控制台
+
+确保已完成安装步骤 1–4，然后在仓库根目录执行：
 
 ```bash
-python scripts/run.py \
-  --mode eval \
-  --agent_cfg behavior.yaml \
-  --scenario_cfg standard.yaml \
-  --exp_name behavior_standard_eval \
-  --render false \
-  --save_video false
+bash gui_console/bin/start_console.sh
 ```
 
-评测结果写入：
+启动后在浏览器访问 `http://127.0.0.1:5173`。
 
-```
-log/behavior_standard_eval/behavior_standard_eval_behavior_standard_seed_0/
-├── runtime.log          # 运行过程日志
-├── progress.txt         # 表格化指标
-└── eval_results/
-    ├── results.pkl      # 汇总结果
-    └── batch_results.jsonl
-```
+### 第 3 步：通过 GUI 验证环境
+
+在 GUI 的 **Step 0（环境确认）** 页面：
+
+1. 填写 Python 解释器路径（通常是 `conda activate safebench` 后 `which python` 的输出）
+2. 确认 CARLA Host/Port 为 `127.0.0.1:2000`
+3. 点击「检查 CARLA 与 Python 环境」
+
+所有检查项变绿即代表环境配置正确，可以继续后续步骤。
+
+### 运行完整评测
+
+通过 GUI 的 Step 1–6 完成地图准备、场景选择、实验配置，最终在 Step 6「运行中心」点击「开始实验」。GUI 会在后台调用 `scripts/run.py`，无需手动拼接命令行参数。
+
+> 若需要直接使用命令行运行，请先阅读 [doc/manual/user_manual.md](doc/manual/user_manual.md) 第 4–5 节，了解运行前的完整前置条件和场景配置方法。
 
 ## 运行参数说明
 

@@ -188,6 +188,13 @@ def _build_config(args):
         merged.update(_load_yaml_config(resolved_config_path))
         print(f"[config] loaded {resolved_config_path}")
 
+    # If CLI --map overrides the yaml's map, clear the yaml-derived origin_dir /
+    # save_dir so _normalize_config re-derives them from the new map name.
+    cli_map = cli_values.get("map")
+    if cli_map is not None and cli_map != merged.get("map"):
+        merged.pop("origin_dir", None)
+        merged.pop("save_dir", None)
+
     for key, value in cli_values.items():
         if value is not None:
             merged[key] = value
