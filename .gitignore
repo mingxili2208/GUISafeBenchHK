@@ -13,6 +13,12 @@ __pycache__/
 *.py[cod]
 *.pyo
 
+# NumPy array data (auto-generated map waypoints / scenario routes)
+*.npy
+
+# Backup files
+*.bak
+
 # Python package build artifacts
 *.egg-info/
 *.egg

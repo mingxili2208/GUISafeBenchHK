@@ -13,7 +13,7 @@
 
 | 依赖 | 要求 |
 |---|---|
-| OS | Linux（推荐 Ubuntu 20.04） |
+| OS | Linux（推荐 Ubuntu 22.04） |
 | Python | 3.8+ |
 | CUDA | 11.7（`requirements.txt` 锁定 `torch 1.13.1+cu117`） |
 | CARLA Simulator | 与仓库匹配的版本（需单独安装） |
