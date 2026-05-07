@@ -134,7 +134,6 @@ class OptionsResponse(BaseModel):
     runtime_root: str
     state: Dict[str, Any]
     python_envs: List[PythonEnvOption]
-    python_suggestions: List[str]
     maps: List[str]
     agents: List[Dict[str, Any]]
     scenario_templates: List[Dict[str, Any]]
@@ -149,3 +148,4 @@ class ExperimentDetailResponse(BaseModel):
     stop_reason_counts: Dict[str, int]
     runtime_log_tail: List[str]
     related_jobs: List[Dict[str, Any]]
+    video_dir: Optional[str] = None

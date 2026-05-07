@@ -3,7 +3,7 @@ import json
 import shutil
 from pathlib import Path
 
-base = Path('/home/hp/STF/SafeBenchHK-zh-simulate-tag/safebench/scenario/scenario_data/14C_2')
+base = Path('/home/hp/STF/GUISafeBenchHK/safebench/scenario/scenario_data/14C_2')
 files = ['standard_scenario_01.json', 'standard_scenario_02.json']
 
 for fname in files:

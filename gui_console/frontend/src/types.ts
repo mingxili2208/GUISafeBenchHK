@@ -46,7 +46,6 @@ export interface OptionsResponse {
   runtime_root: string;
   state: EnvironmentState;
   python_envs: PythonEnvOption[];
-  python_suggestions: string[];
   maps: string[];
   agents: AgentOption[];
   scenario_templates: ScenarioTemplateOption[];
@@ -171,4 +170,5 @@ export interface ExperimentDetail {
   stop_reason_counts: Record<string, number>;
   runtime_log_tail: string[];
   related_jobs: JobInfo[];
+  video_dir?: string | null;
 }

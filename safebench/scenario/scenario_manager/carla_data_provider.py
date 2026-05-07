@@ -487,7 +487,10 @@ class CarlaDataProvider(object):
         actors = []
 
         if CarlaDataProvider._client:
-            responses = CarlaDataProvider._client.apply_batch_sync(batch, sync_mode and tick)
+            # Always pass due_tick_cue=False so apply_batch_sync does NOT tick internally.
+            # We perform the tick explicitly below to avoid a double-tick in sync mode
+            # (apply_batch_sync(batch, True) + world.tick() would advance the sim twice).
+            responses = CarlaDataProvider._client.apply_batch_sync(batch, False)
         else:
             raise ValueError("class member \'client'\' not initialized yet")
 
@@ -502,10 +505,19 @@ class CarlaDataProvider(object):
             CarlaDataProvider._world.wait_for_tick()
 
         actor_ids = [r.actor_id for r in responses if not r.error]
-        for r in responses:
-            if r.error:
-                print("WARNING: Not all actors were spawned")
-                break
+        failed_responses = [r for r in responses if r.error]
+        if failed_responses:
+            print(f"WARNING: {len(failed_responses)}/{len(responses)} actors failed to spawn")
+            for r in failed_responses:
+                print(f"  spawn error: {r.error}")
+            # In sync mode, an extra tick flushes Unreal's pending destroy commands for
+            # partially-allocated physics bodies that result from failed SpawnActor calls.
+            # Without this flush, ghost physics bodies can stall subsequent world.tick() calls.
+            if tick and sync_mode and CarlaDataProvider._world is not None:
+                try:
+                    CarlaDataProvider._world.tick()
+                except Exception as _extra_err:
+                    print(f"WARNING: Extra cleanup tick after spawn failure: {_extra_err}")
         actors = list(CarlaDataProvider._world.get_actors(actor_ids))
         return actors
 
@@ -675,6 +687,29 @@ class CarlaDataProvider(object):
             except Exception:
                 # keep given spawn_points on any error
                 spawn_points_local = waypoints
+
+        # Pre-filter: remove spawn points that already have a vehicle within 5 m.
+        # This avoids certain-collision spawns that can leave ghost physics bodies
+        # in Unreal when SpawnActor's FindTeleportSpot fails to place the actor.
+        try:
+            existing_vehicles = CarlaDataProvider._world.get_actors().filter('vehicle.*')
+            occupied_locs = [v.get_location() for v in existing_vehicles]
+            _min_dist_sq = 5.0 * 5.0
+
+            def _spawn_point_free(sp):
+                for _loc in occupied_locs:
+                    dx = sp.location.x - _loc.x
+                    dy = sp.location.y - _loc.y
+                    if dx * dx + dy * dy < _min_dist_sq:
+                        return False
+                return True
+
+            filtered = [sp for sp in spawn_points_local if _spawn_point_free(sp)]
+            if filtered:
+                spawn_points_local = filtered
+            # else: all points appear occupied — keep original list as last resort
+        except Exception:
+            pass  # keep original list if the pre-check itself fails
 
         batch = []
         for idx in range(amount):

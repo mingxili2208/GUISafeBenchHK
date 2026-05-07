@@ -1,0 +1,53 @@
+{
+  "available_scenarios": [
+    {
+      "TsimShaTsui-1029-3": [
+        {
+          "available_event_configurations": [
+            {
+              "other_actors": {
+                "right": [
+                  {
+                    "pitch": "0.61",
+                    "x": "461.00",
+                    "y": "806.45",
+                    "yaw": "86.75",
+                    "z": "11.82"
+                  }
+                ]
+              },
+              "transform": {
+                "pitch": "0.32",
+                "x": "423.08",
+                "y": "792.78",
+                "yaw": "349.00",
+                "z": "11.11"
+              }
+            },
+            {
+              "other_actors": {
+                "right": [
+                  {
+                    "pitch": "0.58",
+                    "x": "453.27",
+                    "y": "807.04",
+                    "yaw": "84.03",
+                    "z": "11.74"
+                  }
+                ]
+              },
+              "transform": {
+                "pitch": "0.32",
+                "x": "419.64",
+                "y": "793.45",
+                "yaw": "349.00",
+                "z": "11.11"
+              }
+            }
+          ],
+          "scenario_name": "VehicleTurningRoute"
+        }
+      ]
+    }
+  ]
+}

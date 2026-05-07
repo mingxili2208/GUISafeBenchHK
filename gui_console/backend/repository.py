@@ -11,12 +11,21 @@ import re
 import shutil
 import socket
 import subprocess
+import threading
+import time
 from typing import Any, Dict, Iterable, List, Optional
 import uuid
 
 import yaml
 
 from . import settings
+
+# Prevents multiple concurrent probe_current_world_map subprocesses from
+# piling up and overwhelming the CARLA server with simultaneous connections.
+_catalog_lock = threading.Lock()
+_catalog_cache: Dict[str, Any] = {}
+_catalog_cache_ts: float = 0.0
+_CATALOG_TTL_SECONDS = 20.0
 
 
 STOP_REASON_PATTERN = re.compile(r"Scenario stops due to (.+)")
@@ -364,6 +373,48 @@ print(json.dumps(result))
     )
 
 
+def restore_carla_async_mode(host: str, port: int, python_exec: str, repo_root: Optional[Path] = None) -> Dict[str, Any]:
+    """Connect to CARLA and forcibly reset synchronous_mode to False.
+
+    This is used when a run.py process was killed externally (SIGKILL) and
+    CARLA is left stuck in synchronous mode — waiting for a world.tick() that
+    will never come.  Calling this endpoint unfreezes CARLA so it becomes
+    usable again without needing a full CARLA restart.
+    """
+    code = """
+import json
+import sys
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+result = {"ok": False}
+try:
+    import carla
+    client = carla.Client(host, port)
+    client.set_timeout(10.0)
+    world = client.get_world()
+    settings_obj = world.get_settings()
+    was_sync = settings_obj.synchronous_mode
+    settings_obj.synchronous_mode = False
+    settings_obj.fixed_delta_seconds = None
+    world.apply_settings(settings_obj)
+    # Tick once so CARLA can process the settings change and unblock.
+    world.tick()
+    result = {"ok": True, "was_sync": was_sync}
+except Exception as exc:
+    result = {
+        "ok": False,
+        "error": "{name}: {msg}".format(name=type(exc).__name__, msg=str(exc)),
+    }
+print(json.dumps(result))
+""".strip()
+    return run_json_probe(
+        [python_exec, "-c", code, host, str(port)],
+        cwd=repo_root or settings.REPO_ROOT,
+        env=build_python_env(repo_root or settings.REPO_ROOT, python_exec),
+    )
+
+
 def discover_carla_maps(carla_root: Optional[Path]) -> List[Dict[str, Any]]:
     if not carla_root:
         return []
@@ -398,6 +449,16 @@ def discover_carla_maps(carla_root: Optional[Path]) -> List[Dict[str, Any]]:
 
 
 def discover_map_catalog(host: str, port: int, python_exec: str) -> Dict[str, Any]:
+    global _catalog_cache, _catalog_cache_ts
+
+    # Use cached result if still fresh to avoid spawning multiple concurrent
+    # carla.Client subprocesses which can overwhelm and crash the CARLA server.
+    cache_key = "{host}:{port}:{exec}".format(host=host, port=port, exec=python_exec)
+    with _catalog_lock:
+        age = time.monotonic() - _catalog_cache_ts
+        if _catalog_cache.get("_cache_key") == cache_key and age < _CATALOG_TTL_SECONDS:
+            return {k: v for k, v in _catalog_cache.items() if not k.startswith("_")}
+
     carla_root = discover_carla_root()
     current_world = None
     current_world_raw_name = None
@@ -448,13 +509,21 @@ def discover_map_catalog(host: str, port: int, python_exec: str) -> Dict[str, An
             }
         )
 
-    return {
+    result = {
         "carla_root": str(carla_root) if carla_root else None,
         "current_world_map": current_world,
         "current_world_raw_name": current_world_raw_name,
         "current_world_error": current_world_error,
         "maps": merged,
     }
+
+    with _catalog_lock:
+        _catalog_cache.clear()
+        _catalog_cache.update(result)
+        _catalog_cache["_cache_key"] = cache_key
+        _catalog_cache_ts = time.monotonic()
+
+    return result
 
 
 def list_agents() -> List[Dict[str, Any]]:

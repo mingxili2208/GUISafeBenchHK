@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<routes>
+  <route id="0" town="TsimShaTsui-1029-3">
+    <weather cloudiness="5.0" dust_storm="0.0" fog_density="60.0" fog_distance="75.0" fog_falloff="1.0" mie_scattering_scale="0.029999999329447746" precipitation="0.0" precipitation_deposits="50.0" rayleigh_scattering_scale="0.03310000151395798" scattering_intensity="1.0" sun_altitude_angle="-90.0" sun_azimuth_angle="-1.0" wetness="60.0" wind_intensity="10.0" />
+    <waypoint pitch="0.32" roll="0.00" x="421.55" y="784.93" yaw="79.00" z="11.07" />
+    <waypoint pitch="4.40" roll="0.00" x="428.09" y="802.12" yaw="32.45" z="11.34" />
+    <waypoint pitch="0.58" roll="0.00" x="436.77" y="804.17" yaw="-0.84" z="11.58" />
+    <waypoint pitch="0.58" roll="0.00" x="444.79" y="805.09" yaw="10.70" z="11.66" />
+  </route>
+</routes>

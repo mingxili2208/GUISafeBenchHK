@@ -209,6 +209,13 @@ class CarlaRunner:
 
                 self.env.clean_up()
 
+            # Allow CARLA 5 seconds to fully tear down streaming sockets and
+            # release resources from the previous scenario before starting the
+            # next one.  This reduces the per-episode double-close race window.
+            if self.logger is not None:
+                self.logger.log('>> Waiting 5s for CARLA cleanup between episodes...', color='yellow')
+            time.sleep(5)
+
             replay_buffer.finish_one_episode()
             self.logger.add_training_results('episode', e_i)
             print(f'Episode {e_i} Reward: {np.sum(replay_buffer.buffer_episode_reward)}')
@@ -357,6 +364,13 @@ class CarlaRunner:
                         self.env.clean_up()
                 except Exception as cleanup_error:
                     self.logger.log(f'>> Clean up failed: {cleanup_error}', 'red')
+
+            # Allow CARLA 5 seconds to fully tear down streaming sockets and
+            # release resources from the previous scenario before starting the
+            # next one.  This gives CARLA breathing room between batches.
+            if self.logger is not None:
+                self.logger.log('>> Waiting 5s for CARLA cleanup between scenario batches...', color='yellow')
+            time.sleep(5)
 
             scenario_names = self._collect_batch_scenario_names(sampled_scenario_configs, num_sampled_scenario)
             batch_metadata = self._build_batch_metadata(sampled_scenario_configs, scenario_names)

@@ -218,13 +218,18 @@ class RouteScenario:
         #     rolename='background'
         # )
         amount = 10  # 生成背景车流,指定生成的数量
+        # safe_blueprint=True: 只选 4 轮标准乘用车，排除 HGV/卡车等大型蓝图
+        # 这些蓝图的 UpdatedComponent 不是碰撞组件，spawn 失败时 Unreal 无法完整
+        # 回滚物理体，会在世界中留下幽灵物理体，导致后续 world.tick() 接触解算
+        # 进入无限循环，引发 120s TimeoutException 崩溃。
         new_actors = CarlaDataProvider.request_new_batch_actors(
             'vehicle.*',
             self.ego_vehicle,
             amount,
             autopilot=True,
             random_location=False,
-            rolename='background'
+            rolename='background',
+            safe_blueprint=True
         )
 
         if new_actors is None:

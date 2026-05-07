@@ -76,6 +76,75 @@ pre {
   min-height: 100vh;
 }
 
+.right-rail {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border-left: 1px solid rgba(20, 32, 25, 0.08);
+  backdrop-filter: blur(12px);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 14px 40px rgba(20, 32, 25, 0.08);
+}
+
+.right-rail-toggle {
+  padding: 0.9rem 1.2rem 0.5rem;
+  border-bottom: 1px solid rgba(20, 32, 25, 0.07);
+}
+
+.right-rail .task-console {
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  background: transparent;
+}
+
+.step-guide-panel {
+  padding: 1.2rem;
+  overflow: auto;
+}
+
+.step-guide-content h4 {
+  margin: 0 0 0.85rem;
+  font-size: 1rem;
+}
+
+.step-guide-content ol {
+  margin: 0 0 0.9rem;
+  padding-left: 1.35rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.step-guide-content li {
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.step-guide-content .muted {
+  font-size: 0.84rem;
+  margin: 0;
+}
+
+.task-tab-button.has-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.rail-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fffdf7;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
 .step-nav,
 .task-console,
 .panel,
@@ -958,6 +1027,40 @@ pre {
   margin-top: 1rem;
 }
 
+.environment-check-action {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin-top: 1.75rem;
+}
+
+.environment-check-button {
+  padding: 0.85rem 2.4rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 18px rgba(25, 99, 93, 0.28);
+}
+
+.btn-restore-async {
+  padding: 0.7rem 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  background: transparent;
+  color: #c96a00;
+  border: 1.5px solid #c96a00;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+.btn-restore-async:hover {
+  background: #fff3e0;
+  color: #8a4500;
+  border-color: #8a4500;
+}
+
 .map-existing-layout {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -1375,27 +1478,205 @@ pre {
 
 .checkbox-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.7rem;
   border: 1px solid rgba(20, 32, 25, 0.1);
   border-radius: 18px;
   padding: 0.85rem 1rem;
   background: rgba(255, 255, 255, 0.62);
+  cursor: pointer;
+  overflow: hidden;
 }
 
 .checkbox-card input {
   width: auto;
+  flex-shrink: 0;
+  margin-top: 0.18em;
+}
+
+.checkbox-card-label {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.standards-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.standards-footer .muted {
+  margin: 0;
+  flex: 1;
 }
 
 .experiment-layout {
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 1.15rem;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Tab bar */
+.exp-tab-bar {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1.5px solid rgba(20, 32, 25, 0.08);
+  padding-bottom: 0;
+}
+
+.exp-tab {
+  position: relative;
+  background: none;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  border-radius: 0;
+  margin-bottom: -1.5px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.exp-tab:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.exp-tab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.exp-tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.exp-tab-count {
+  background: rgba(25, 99, 93, 0.12);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 99px;
+  padding: 0.05rem 0.42rem;
+}
+
+.live-badge {
+  color: #e05a3a;
+  font-size: 0.6rem;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Step 6 run form collapsed summary */
+.run-form-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(25, 99, 93, 0.05);
+  border: 1px solid rgba(25, 99, 93, 0.12);
+  margin-bottom: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.run-form-summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.run-form-expand-btn {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+}
+
+/* Step 6 inline run monitor */
+.run-center-monitor {
+  margin-top: 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  background: rgba(25, 99, 93, 0.05);
+  border: 1px solid rgba(25, 99, 93, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.run-center-monitor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.run-center-monitor-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.run-center-monitor-progress {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.run-center-monitor-progress strong {
+  font-size: 1.05rem;
+  color: var(--accent);
+}
+
+.run-center-metrics {
+  margin-top: 0.1rem;
+}
+
+.run-center-log {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.exp-monitor-actions {
+  margin-top: 0.75rem;
+}
+
+/* Panel wrapper for each tab's content */
+.exp-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.experiment-item--selected {
+  outline: 2px solid rgba(25, 99, 93, 0.3);
+  background:
+    radial-gradient(circle at top right, rgba(25, 99, 93, 0.1), transparent 42%),
+    rgba(255, 255, 255, 0.78);
 }
 
 .experiment-layout.has-selection {
-  grid-template-columns: 250px minmax(0, 1fr);
+  /* legacy class kept for safety, no-op with new layout */
 }
 
 .experiment-sidebar {
@@ -1893,7 +2174,8 @@ pre {
   }
 
   .step-nav,
-  .task-console {
+  .task-console,
+  .right-rail {
     border: 0;
   }
 
@@ -2016,4 +2298,208 @@ pre {
   100% {
     box-shadow: 0 0 0 0 rgba(20, 32, 25, 0);
   }
+}
+
+/* ── Step 3-5 sub-step navigation tabs ──────────────────────────────── */
+.substep-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.substep-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(20, 32, 25, 0.14);
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.substep-tab:hover {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(25, 99, 93, 0.35);
+  color: var(--ink);
+}
+
+.substep-tab--active {
+  background: rgba(25, 99, 93, 0.12);
+  border-color: rgba(25, 99, 93, 0.55);
+  color: #19635d;
+}
+
+.substep-tab-badge {
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.1rem 0.42rem;
+  border-radius: 999px;
+  background: rgba(25, 99, 93, 0.12);
+  color: #19635d;
+}
+
+/* ── Sub-step card block ─────────────────────────────────────────────── */
+.substep-block {
+  transition: border-color 0.18s, background 0.18s;
+}
+
+.substep-block--active {
+  border: 1.5px solid rgba(25, 99, 93, 0.45);
+  background: rgba(25, 99, 93, 0.06);
+}
+
+.substep-block--locked {
+  opacity: 0.65;
+}
+
+.substep-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ── Per-scenario route drawing guide ─────────────────────────────────── */
+.scenario-guide-tip {
+  margin: 0.55rem 0 0.1rem;
+}
+
+.scenario-guide-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  padding: 0.18rem 0.3rem;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #19635d;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.scenario-guide-toggle:hover {
+  background: rgba(25, 99, 93, 0.1);
+}
+
+.scenario-guide-body {
+  margin-top: 0.45rem;
+  padding: 0.65rem 0.75rem;
+  background: rgba(25, 99, 93, 0.06);
+  border-left: 3px solid rgba(25, 99, 93, 0.4);
+  border-radius: 0 8px 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.scenario-guide-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.scenario-guide-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #19635d;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.scenario-guide-text {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--ink-soft, #4a5568);
+}
+
+
+
+.substep-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.substep-status {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.substep-status--done {
+  color: #19635d;
+}
+
+.substep-status--missing {
+  color: #9e3123;
+}
+
+.substep-status--locked {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* ── Card header right column (pill + step dots) ─────────────────────── */
+.card-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+}
+
+.card-step-dots {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.step-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(20, 32, 25, 0.25);
+}
+
+.step-dot--done {
+  background: #19635d;
+  border-color: #19635d;
+}
+
+.step-dot--active {
+  background: transparent;
+  border: 2px solid #19635d;
+}
+
+.step-dot--pending {
+  background: rgba(20, 32, 25, 0.1);
+}
+
+/* ── Danger ghost button (clear route / scenario) ────────────────────── */
+.btn-danger-ghost {
+  background: transparent;
+  border: 1.5px solid rgba(158, 49, 35, 0.45);
+  color: #9e3123;
+  font-size: 0.83rem;
+  padding: 0.32rem 0.65rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+
+.btn-danger-ghost:hover {
+  background: rgba(158, 49, 35, 0.09);
+  border-color: #9e3123;
 }

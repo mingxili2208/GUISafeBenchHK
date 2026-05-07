@@ -4138,5 +4138,212 @@
     "scenario_folder": "standard",
     "risk_level": null,
     "parameters": null
+  },
+  {
+    "data_id": 460,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 0,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 461,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 1,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 462,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 2,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 463,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 3,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 464,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 4,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 465,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 5,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 466,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 6,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 467,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 7,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 468,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 8,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 469,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 9,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 470,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 10,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 471,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 11,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 472,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 12,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 473,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 13,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 474,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 14,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 475,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 15,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 476,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 16,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 477,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 17,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 478,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 18,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 479,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 19,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 480,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 20,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 481,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 21,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
+  },
+  {
+    "data_id": 482,
+    "scenario_id": 1,
+    "route_id": 20,
+    "weather_id": 22,
+    "scenario_folder": "standard",
+    "risk_level": null,
+    "parameters": null
   }
 ]

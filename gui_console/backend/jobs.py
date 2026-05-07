@@ -179,6 +179,19 @@ class JobStore:
 
         log_handle = log_path.open("a", encoding="utf-8")
         launch_command = self._wrap_named_command(command, process_name)
+
+        # --- DEBUG: enable core dump + heap corruption detection for child process ---
+        import resource as _resource
+        try:
+            _resource.setrlimit(_resource.RLIMIT_CORE, (_resource.RLIM_INFINITY, _resource.RLIM_INFINITY))
+        except Exception:
+            pass
+        # MALLOC_CHECK_=3: glibc detects heap corruption and aborts with SIGABRT (generates core)
+        # MALLOC_PERTURB_=0xcd: fills freed memory so use-after-free corrupts predictably near crash site
+        launch_env.setdefault("MALLOC_CHECK_", "3")
+        launch_env.setdefault("MALLOC_PERTURB_", "205")  # 0xcd
+        # --- END DEBUG ---
+
         try:
             process = subprocess.Popen(
                 launch_command,

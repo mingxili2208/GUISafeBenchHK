@@ -24,7 +24,7 @@ gui_console/
 建议在可导入 `safebench` 的 Python 环境中启动：
 
 ```bash
-cd /home/fsm/SafeBenchHK-zh-simulate-tag
+cd /home/fsm/GUISafeBenchHK
 pip install -r gui_console/backend/requirements.txt
 ./gui_console/bin/start_backend.sh
 ```
@@ -32,9 +32,9 @@ pip install -r gui_console/backend/requirements.txt
 ## 前端启动
 
 ```bash
-cd /home/fsm/SafeBenchHK-zh-simulate-tag/gui_console/frontend
+cd /home/fsm/GUISafeBenchHK/gui_console/frontend
 npm install
-cd /home/fsm/SafeBenchHK-zh-simulate-tag
+cd /home/fsm/GUISafeBenchHK
 ./gui_console/bin/start_frontend.sh
 ```
 
@@ -52,7 +52,7 @@ GUI_FRONTEND_MODE=dev ./gui_console/bin/start_frontend.sh
 如果你希望前后端一键启动、统一监管生命周期和资源占用，并且在任意时刻通过 `Ctrl+C` 一起停掉，使用：
 
 ```bash
-cd /home/fsm/SafeBenchHK-zh-simulate-tag
+cd /home/fsm/GUISafeBenchHK
 conda activate safebench
 ./gui_console/bin/start_console.sh
 ```
@@ -78,7 +78,7 @@ GUI_CONSOLE_FRONTEND_MODE=dev ./gui_console/bin/start_console.sh
 如果需要从另一个终端一键停止：
 
 ```bash
-cd /home/fsm/SafeBenchHK-zh-simulate-tag
+cd /home/fsm/GUISafeBenchHK
 ./gui_console/bin/stop_console.sh
 ```
 

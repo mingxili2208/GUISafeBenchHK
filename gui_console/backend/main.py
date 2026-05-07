@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import List, Optional
 
@@ -30,6 +31,7 @@ from .repository import (
     probe_experiment_pickles,
     probe_safebench_import,
     resolve_runtime_python_exec,
+    restore_carla_async_mode,
     standard_cards,
     tail_text_file,
 )
@@ -64,6 +66,11 @@ state_store = AppStateStore()
 job_store = JobStore()
 
 
+@app.on_event("startup")
+def _startup():
+    ensure_runtime_layout()
+
+
 def _current_state():
     return state_store.load()
 
@@ -84,7 +91,7 @@ def _failed_environment_checks(state) -> List[str]:
     return failed_checks
 
 
-def _refresh_environment_state(state, *, refresh_import: bool = False, connect_session: bool = False):
+def _refresh_environment_state(state, *, refresh_import: bool = False, connect_session: bool = False, preserve_session: bool = False):
     repo_root = Path(state.repo_root).resolve()
     state.python_exists = settings.is_valid_python_exec(state.python_exec)
     state.carla_reachable = check_tcp_port(state.carla_host, state.carla_port)
@@ -103,7 +110,7 @@ def _refresh_environment_state(state, *, refresh_import: bool = False, connect_s
     ready = state.python_exists and state.carla_reachable and state.safebench_import_ok
     if connect_session:
         state.carla_session_connected = ready
-    elif state.carla_session_connected and not ready:
+    elif not preserve_session and state.carla_session_connected and not ready:
         state.carla_session_connected = False
 
     if ready:
@@ -170,14 +177,12 @@ def health():
 
 @app.get("/api/options", response_model=OptionsResponse)
 def options():
-    ensure_runtime_layout()
     return {
         "repo_root": str(settings.REPO_ROOT),
         "gui_root": str(settings.GUI_ROOT),
         "runtime_root": str(settings.RUNTIME_ROOT),
         "state": _current_state().to_dict(),
         "python_envs": settings.python_env_options(),
-        "python_suggestions": settings.default_python_suggestions(),
         "maps": discover_maps(),
         "agents": list_agents(),
         "scenario_templates": list_scenario_templates(),
@@ -223,7 +228,7 @@ def check_environment(request: EnvironmentCheckRequest):
 @app.get("/api/environment/status", response_model=EnvironmentCheckResponse)
 def environment_status():
     runtime_paths = ensure_runtime_layout()
-    state, failed_checks, ok = _refresh_environment_state(_current_state(), refresh_import=False)
+    state, failed_checks, ok = _refresh_environment_state(_current_state(), refresh_import=False, preserve_session=True)
     if state.carla_session_connected and ok:
         message = "GUI 与 CARLA 的会话已连接。"
     elif state.carla_reachable:
@@ -242,7 +247,7 @@ def environment_status():
 @app.post("/api/environment/disconnect", response_model=EnvironmentCheckResponse)
 def disconnect_environment():
     runtime_paths = ensure_runtime_layout()
-    state, failed_checks, ok = _refresh_environment_state(_current_state(), refresh_import=False)
+    state = _current_state()
     state.carla_session_connected = False
     state.last_checked_at = now_iso()
     state_store.save(state)
@@ -251,20 +256,47 @@ def disconnect_environment():
         "message": "已断开 GUI 与 CARLA 的会话；CARLA 服务本身未关闭。",
         "state": state.to_dict(),
         "runtime_paths": runtime_paths,
-        "failed_checks": failed_checks if not ok else [],
+        "failed_checks": [],
     }
+
+
+@app.post("/api/environment/restore-async")
+def restore_async():
+    """Reset CARLA synchronous mode back to False (async).
+
+    When a run.py process is killed externally (SIGKILL / OOM), CARLA is left
+    stuck in synchronous mode waiting for world.tick() forever.  This endpoint
+    connects to CARLA, disables synchronous mode, and fires a single tick so
+    CARLA becomes responsive again — no CARLA restart required.
+    """
+    state = _current_state()
+    if not state.python_exec or not state.carla_host or not state.carla_port:
+        raise HTTPException(status_code=400, detail="环境尚未配置，请先完成环境检查。")
+    result = restore_carla_async_mode(
+        state.carla_host, state.carla_port, state.python_exec
+    )
+    if result.get("ok"):
+        was_sync = result.get("was_sync", False)
+        message = (
+            "CARLA 已恢复异步模式（原先处于同步模式）。" if was_sync
+            else "CARLA 已确认处于异步模式，无需修改。"
+        )
+        return {"ok": True, "message": message, "was_sync": was_sync}
+    else:
+        raise HTTPException(
+            status_code=502,
+            detail="无法恢复 CARLA 异步模式：{err}".format(err=result.get("error", "未知错误")),
+        )
 
 
 @app.get("/api/maps/{map_name}/status", response_model=MapStatusResponse)
 def get_map_status(map_name: str):
-    ensure_runtime_layout()
     return {"map_name": map_name, "paths": map_status(map_name)}
 
 
 @app.get("/api/maps/catalog", response_model=MapCatalogResponse)
 def get_map_catalog():
     state = _current_state()
-    ensure_runtime_layout()
     return discover_map_catalog(state.carla_host, state.carla_port, state.python_exec)
 
 
@@ -285,7 +317,6 @@ def start_map_prepare(request: MapPrepareRequest):
     python_exec = _effective_python_exec(request.python_exec)
     port = request.port if request.port is not None else state.carla_port
     host = request.host or state.carla_host
-    ensure_runtime_layout()
     link_info = ensure_map_link(request.map_name)
     job = job_store.start_job(
         job_type="map-prepare",
@@ -310,7 +341,6 @@ def start_map_prepare(request: MapPrepareRequest):
 
 @app.post("/api/jobs/route-editor", response_model=JobInfo)
 def start_route_editor(request: StandardJobRequest):
-    ensure_runtime_layout()
     ensure_map_link(request.map_name)
     python_exec = _effective_python_exec(request.python_exec)
     job = job_store.start_job(
@@ -335,7 +365,6 @@ def start_route_editor(request: StandardJobRequest):
 
 @app.post("/api/jobs/scenario-editor", response_model=JobInfo)
 def start_scenario_editor(request: StandardJobRequest):
-    ensure_runtime_layout()
     ensure_map_link(request.map_name)
     python_exec = _effective_python_exec(request.python_exec)
     job = job_store.start_job(
@@ -358,9 +387,35 @@ def start_scenario_editor(request: StandardJobRequest):
     return job
 
 
+@app.delete("/api/maps/{map_name}/standards/{scenario_id}/route")
+def clear_route(map_name: str, scenario_id: int):
+    """Delete all route .npy files for a scenario, leaving the directory intact."""
+    import shutil as _shutil
+    route_dir = settings.BUILDER_SCENARIO_ORIGIN_DIR / map_name / "scenario_{sid:02d}_routes".format(sid=scenario_id)
+    deleted = 0
+    if route_dir.exists():
+        for path in list(route_dir.iterdir()):
+            if path.name.startswith("route_") and path.name.endswith(".npy"):
+                path.unlink()
+                deleted += 1
+    return {"deleted": deleted, "dir": str(route_dir)}
+
+
+@app.delete("/api/maps/{map_name}/standards/{scenario_id}/scenario")
+def clear_scenario(map_name: str, scenario_id: int):
+    """Delete all scenario/sides .npy files for a scenario, leaving the directory intact."""
+    scenario_dir = settings.BUILDER_SCENARIO_ORIGIN_DIR / map_name / "scenario_{sid:02d}_scenarios".format(sid=scenario_id)
+    deleted = 0
+    if scenario_dir.exists():
+        for path in list(scenario_dir.iterdir()):
+            if path.name.startswith("scenario_") and path.name.endswith(".npy"):
+                path.unlink()
+                deleted += 1
+    return {"deleted": deleted, "dir": str(scenario_dir)}
+
+
 @app.post("/api/jobs/export", response_model=JobInfo)
 def start_export(request: ExportRequest):
-    ensure_runtime_layout()
     ensure_map_link(request.map_name)
     python_exec = _effective_python_exec(request.python_exec)
     job = job_store.start_job(
@@ -410,7 +465,6 @@ def get_job_log(job_id: str, lines: int = Query(default=200, ge=10, le=2000)):
 
 @app.post("/api/runs", response_model=JobInfo)
 def start_run(request: RunExperimentRequest):
-    ensure_runtime_layout()
     state = _current_state()
     python_exec = resolve_runtime_python_exec(state.python_exec)
     if not python_exec:
@@ -493,13 +547,25 @@ def experiment_detail(experiment_id: str):
         "stop_reason_counts": parse_stop_reasons(Path(manifest["runtime_log_path"])),
         "runtime_log_tail": tail_text_file(Path(manifest["runtime_log_path"]), 80),
         "related_jobs": related_jobs,
+        "video_dir": str(Path(manifest["output_dir"]) / "video") if manifest.get("save_video") else None,
     }
+
+
+@app.post("/api/experiments/{experiment_id}/open-video-dir")
+def open_video_dir(experiment_id: str):
+    manifest = load_manifest(experiment_id)
+    if not manifest.get("save_video"):
+        raise HTTPException(status_code=400, detail="该实验未开启视频录制。")
+    video_dir = Path(manifest["output_dir"]) / "video"
+    if not video_dir.exists():
+        raise HTTPException(status_code=404, detail=f"视频目录不存在：{video_dir}")
+    subprocess.Popen(["xdg-open", str(video_dir)])
+    return {"ok": True, "video_dir": str(video_dir)}
 
 
 @app.post("/api/experiments/{experiment_id}/resume", response_model=JobInfo)
 def resume_experiment(experiment_id: str):
     manifest = load_manifest(experiment_id)
-    ensure_runtime_layout()
     ensure_map_link(manifest["map"])
     state = _current_state()
     python_exec = resolve_runtime_python_exec(state.python_exec, manifest.get("python_exec"))
@@ -532,7 +598,6 @@ def resume_experiment(experiment_id: str):
 @app.post("/api/experiments/{experiment_id}/rerun", response_model=JobInfo)
 def rerun_experiment(experiment_id: str, request: RerunExperimentRequest):
     manifest = load_manifest(experiment_id)
-    ensure_runtime_layout()
     ensure_map_link(manifest["map"])
     state = _current_state()
     python_exec = resolve_runtime_python_exec(state.python_exec, manifest.get("python_exec"))

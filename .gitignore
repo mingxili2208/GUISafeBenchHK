@@ -34,3 +34,8 @@ Thumbs.db
 
 # ─── Model checkpoints (tracked via Git LFS, see .gitattributes) ──────────────
 # Intentionally NOT ignored — handled by Git LFS
+
+#———— Docs ──────────────────────────────────────────────────────────────────────────────
+docs/_build/
+*.pptx
+*.docx

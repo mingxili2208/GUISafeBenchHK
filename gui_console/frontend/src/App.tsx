@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-import { apiGet, apiPost } from "./api";
-import { ExperimentList } from "./components/ExperimentList";
-import { StandardCard } from "./components/StandardCard";
+import { apiGet, apiPost, apiDelete } from "./api";
+import { ExperimentList, Step7Tab } from "./components/ExperimentList";
+import { StandardCard, CardSubStep } from "./components/StandardCard";
 import { TaskConsole } from "./components/TaskConsole";
 import type {
   ExperimentDetail,
@@ -35,6 +35,77 @@ function pickExperimentFocusJob(detail: ExperimentDetail | null): JobInfo | null
   );
 }
 
+const STEP_GUIDES: React.ReactNode[] = [
+  /* Step 0 */ (
+    <div className="step-guide-content">
+      <h4>Step 0 · 环境确认</h4>
+      <ol>
+        <li>确认<strong>仓库根目录</strong>和 <strong>Python 解释器</strong>已正确显示。</li>
+        <li>按需填写 <strong>CARLA Host / Port / TM Port</strong>（默认本机 2000/8000）。</li>
+        <li>点击绿色的<strong>「检查 CARLA 与 Python 环境」</strong>按钮。</li>
+        <li>三项全部通过后，右侧导航的后续步骤会解锁。</li>
+      </ol>
+      <p className="muted">若 CARLA 未启动，「CARLA 连通性」会失败，先启动 CARLA 再重试即可。</p>
+    </div>
+  ),
+  /* Step 1 */ (
+    <div className="step-guide-content">
+      <h4>Step 1 · 地图与 Waypoint</h4>
+      <ol>
+        <li>在下拉框中选择目标<strong>地图</strong>，确认仓库中对应的数据目录存在。</li>
+        <li>点击<strong>「开始构建」</strong>，等待 waypoint 生成任务完成。</li>
+        <li>若已有构建结果，点击<strong>「跳过，继续」</strong>可直接进入 Step 2。</li>
+      </ol>
+      <p className="muted">构建任务启动后，右侧会自动切换到「任务监控」显示进度。</p>
+    </div>
+  ),
+  /* Step 2 */ (
+    <div className="step-guide-content">
+      <h4>Step 2 · 选择测试标准</h4>
+      <ol>
+        <li>勾选需要评测的<strong>测试标准</strong>（可多选）。</li>
+        <li>确认选择后点击<strong>「下一步」</strong>进入标准工作区。</li>
+      </ol>
+      <p className="muted">每个标准在 Step 3-5 中会生成独立的工作卡片，可分别配置。</p>
+    </div>
+  ),
+  /* Step 3 */ (
+    <div className="step-guide-content">
+      <h4>Step 3-5 · 编辑器操作说明</h4>
+      <p className="muted">路线编辑器（create_routes）与场景编辑器（create_scenarios）共用以下快捷键：</p>
+      <ul>
+        <li><strong>左键点击</strong>：在地图上选取路径点 / Trigger / Actor 位置；再次点击同一点可取消选中。</li>
+        <li><strong>右键点击</strong>：保存当前已选点为一条 route 或 scenario，保存后自动清空选点，可继续绘制下一条。</li>
+        <li><strong>R 键</strong>：将视角重置回地图中心。</li>
+        <li><strong>ESC</strong>：退出编辑器。请在按 ESC 前确认已通过右键保存所有需要的条目，未右键的当前选点不会自动保存。</li>
+      </ul>
+      <p className="muted">鼠标滚轮可缩放地图；按住鼠标中键或拖动可平移视角。</p>
+    </div>
+  ),
+  /* Step 4 */ (
+    <div className="step-guide-content">
+      <h4>Step 6 · 运行中心</h4>
+      <ol>
+        <li>选择<strong>智能体</strong>和<strong>场景模板</strong>，填写实验名称与随机种子。</li>
+        <li>点击<strong>「提交运行」</strong>，任务进入队列后自动切换到「任务监控」。</li>
+        <li>运行期间可在「任务监控—当前」中查看实时日志与资源占用。</li>
+      </ol>
+      <p className="muted">勾选「保存视频」会产生额外磁盘占用，大规模评测时可关闭。</p>
+    </div>
+  ),
+  /* Step 5 */ (
+    <div className="step-guide-content">
+      <h4>Step 7 · 结果与续跑</h4>
+      <ol>
+        <li>在左侧列表中选择一个<strong>实验</strong>查看详情。</li>
+        <li>若实验未完成，点击<strong>「续跑」</strong>从断点继续；已完成可点击<strong>「重跑」</strong>。</li>
+        <li>展开各场景卡片可查看每条 route 的得分与失败原因。</li>
+      </ol>
+      <p className="muted">「续跑」会复用原实验 ID，跳过已完成的场景。</p>
+    </div>
+  ),
+];
+
 function App() {
   const alertedRuntimeEventsRef = useRef<Set<string>>(new Set());
   const [options, setOptions] = useState<OptionsResponse | null>(null);
@@ -43,12 +114,16 @@ function App() {
   const [activeJobLog, setActiveJobLog] = useState<string[]>([]);
   const [experimentJobLog, setExperimentJobLog] = useState<string[]>([]);
   const [taskConsoleView, setTaskConsoleView] = useState<"current" | "history">("current");
+  const [rightPanel, setRightPanel] = useState<"guide" | "console">("guide");
   const [experiments, setExperiments] = useState<ExperimentSummary[]>([]);
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
   const [experimentDetail, setExperimentDetail] = useState<ExperimentDetail | null>(null);
   const [selectedStep, setSelectedStep] = useState<number>(0);
   const [selectedMap, setSelectedMap] = useState<string>("");
   const [selectedStandards, setSelectedStandards] = useState<number[]>([]);
+  const [cardSubStep, setCardSubStep] = useState<CardSubStep>("route");
+  const [step7Tab, setStep7Tab] = useState<Step7Tab>("list");
+  const [runFormCollapsed, setRunFormCollapsed] = useState(false);
   const [cards, setCards] = useState<StandardCardType[]>([]);
   const [mapCatalog, setMapCatalog] = useState<MapCatalogResponse | null>(null);
   const [mapStatus, setMapStatus] = useState<MapStatusResponse | null>(null);
@@ -590,6 +665,21 @@ function App() {
     }
   }
 
+  async function handleRestoreAsync() {
+    setError(null);
+    try {
+      const response = await apiPost<{ ok: boolean; message: string; was_sync: boolean }>(
+        "/api/environment/restore-async",
+        {}
+      );
+      setNotice(response.message);
+      // Refresh environment status so UI shows updated connection state.
+      await refreshEnvironmentStatus(true);
+    } catch (fetchError) {
+      handleApiError(fetchError);
+    }
+  }
+
   async function handleGenerateWaypoint() {
     if (!selectedMap) {
       setError("请先选择地图。");
@@ -665,6 +755,30 @@ function App() {
     }
   }
 
+  async function handleClearRoute(scenarioId: number) {
+    if (!window.confirm(`确认清零 Scenario ${scenarioId.toString().padStart(2, "0")} 的路线数据？\n此操作同时会清除该场景的 Trigger/Actor 数据。`)) return;
+    try {
+      // Also clear scenario first (cascade)
+      await apiDelete(`/api/maps/${encodeURIComponent(selectedMap)}/standards/${scenarioId}/scenario`);
+      await apiDelete(`/api/maps/${encodeURIComponent(selectedMap)}/standards/${scenarioId}/route`);
+      setNotice(`已清零 Scenario ${scenarioId.toString().padStart(2, "0")} 的路线及场景数据`);
+      await loadCards(selectedMap);
+    } catch (fetchError) {
+      handleApiError(fetchError);
+    }
+  }
+
+  async function handleClearScenario(scenarioId: number) {
+    if (!window.confirm(`确认清零 Scenario ${scenarioId.toString().padStart(2, "0")} 的 Trigger/Actor 数据？`)) return;
+    try {
+      await apiDelete(`/api/maps/${encodeURIComponent(selectedMap)}/standards/${scenarioId}/scenario`);
+      setNotice(`已清零 Scenario ${scenarioId.toString().padStart(2, "0")} 的场景数据`);
+      await loadCards(selectedMap);
+    } catch (fetchError) {
+      handleApiError(fetchError);
+    }
+  }
+
   async function handleRun() {
     if (!selectedMap || runScenarioId === "") {
       setError("请先选择地图，并确保至少有一个标准卡片达到 Run Ready。");
@@ -688,7 +802,13 @@ function App() {
       setNotice(`已启动实验：${job.id}`);
       setTaskConsoleView("current");
       setActiveJobId(job.id);
-      setSelectedStep(5);
+      setRunFormCollapsed(true);
+      const newExpId =
+        typeof job.metadata?.experiment_id === "string" ? (job.metadata.experiment_id as string) : null;
+      if (newExpId) {
+        setSelectedExperimentId(newExpId);
+      }
+      setSelectedStep(4);
       await loadJobs();
       await loadExperiments();
     } catch (fetchError) {
@@ -700,7 +820,8 @@ function App() {
     try {
       setSelectedExperimentId(experimentId);
       setExperimentDetail(null);
-      setSelectedStep(5);
+      setRunFormCollapsed(true);
+      setSelectedStep(4);
       const job = await apiPost<JobInfo>(`/api/experiments/${experimentId}/resume`, {});
       setNotice(`已发起续跑任务：${job.id}`);
       setTaskConsoleView("current");
@@ -717,7 +838,8 @@ function App() {
     try {
       setSelectedExperimentId(experimentId);
       setExperimentDetail(null);
-      setSelectedStep(5);
+      setRunFormCollapsed(true);
+      setSelectedStep(4);
       const job = await apiPost<JobInfo>(`/api/experiments/${experimentId}/rerun`, {
         render: true,
         save_video: true
@@ -786,6 +908,7 @@ function App() {
   function handleOpenExperiment(experimentId: string) {
     setSelectedExperimentId(experimentId);
     setExperimentDetail(null);
+    setStep7Tab("detail");
     setSelectedStep(5);
   }
 
@@ -803,6 +926,7 @@ function App() {
       return;
     }
     setSelectedExperimentId(runtimeAlert.experimentId);
+    setStep7Tab("detail");
     setSelectedStep(5);
     setRuntimeAlert(null);
   }
@@ -828,8 +952,21 @@ function App() {
       setSelectedExperimentId(null);
       setExperimentDetail(null);
     }
+    setStep7Tab("list");
     setSelectedStep(5);
   }
+
+  const runningJobs = jobs.filter((j) => j.status === "running" || j.status === "starting");
+
+  useEffect(() => {
+    if (runningJobs.length > 0) {
+      setRightPanel("console");
+    }
+  }, [runningJobs.length]);
+
+  useEffect(() => {
+    setRightPanel("guide");
+  }, [selectedStep]);
 
   useEffect(() => {
     const previousStep = previousStepRef.current;
@@ -859,7 +996,10 @@ function App() {
               <button
                 key={title}
                 className={`step-link ${selectedStep === index ? "active" : ""}`}
-                disabled={index > 0 && !environmentConfirmed}
+                disabled={
+                  (index > 0 && !environmentConfirmed) ||
+                  (index === 3 && selectedStandards.length === 0)
+                }
                 onClick={() => setSelectedStep(index)}
               >
                 {title}
@@ -956,10 +1096,6 @@ function App() {
                 </strong>
               </article>
               <article className="global-detail-item">
-                <span>最近探测</span>
-                <strong>{lastProbeAt}</strong>
-              </article>
-              <article className="global-detail-item">
                 <span>会话说明</span>
                 <strong>
                   {carlaSessionConnected
@@ -977,21 +1113,6 @@ function App() {
         {selectedStep === 0 ? (
           <section className="panel">
             <h3>Step 0. 环境确认</h3>
-            <div className="environment-step-intro">
-              <article className="environment-step-note">
-                <span>目的</span>
-                <p>确认当前仓库、Python 解释器与 CARLA 会话可用，避免后续构建和运行阶段因为环境问题中断。</p>
-              </article>
-              <article className="environment-step-note">
-                <span>如何操作</span>
-                <p>先选择仓库与 Python，再确认 Host、CARLA Port、TM Port，最后执行环境检查。</p>
-              </article>
-              <article className="environment-step-note">
-                <span>反馈说明</span>
-                <p>结果会按项标明通过或未通过；若失败，会在下方给出失败原因，便于继续调整。</p>
-              </article>
-            </div>
-
             <div className="environment-setup-shell">
               <div className="environment-form-stack">
                 <div className="form-grid environment-form-grid">
@@ -999,7 +1120,8 @@ function App() {
                     仓库根目录
                     <input
                       value={envForm.repo_root}
-                      onChange={(event) => setEnvForm({ ...envForm, repo_root: event.target.value })}
+                      readOnly
+                      disabled
                     />
                   </label>
                   <label>
@@ -1049,14 +1171,20 @@ function App() {
                 </div>
               </div>
 
-              <aside className="environment-check-card">
-                <p className="eyebrow">环境检查</p>
-                <h4>确认 Python、safebench 导入与 CARLA 连通性</h4>
-                <p className="muted">检查通过后会继续复用当前会话，并解锁后续地图构建和运行步骤。</p>
-                <button className="environment-check-button" onClick={handleEnvironmentCheck}>
-                  检查 CARLA 与 Python 环境
+            </div>
+            <div className="environment-check-action">
+              <button className="environment-check-button" onClick={handleEnvironmentCheck}>
+                检查 CARLA 与 Python 环境
+              </button>
+              {options?.state.carla_reachable ? (
+                <button
+                  className="btn-restore-async"
+                  title="当运行任务被强制终止后，CARLA 可能卡在同步模式。点击此按钮可恢复 CARLA 为正常的异步模式。"
+                  onClick={handleRestoreAsync}
+                >
+                  恢复 CARLA 异步模式
                 </button>
-              </aside>
+              ) : null}
             </div>
 
             {options ? (
@@ -1086,8 +1214,6 @@ function App() {
                     <p className="path">{options.state.error}</p>
                   </div>
                 ) : null}
-                <h4>当前状态</h4>
-                <pre>{JSON.stringify(options.state, null, 2)}</pre>
               </div>
             ) : null}
           </section>
@@ -1100,13 +1226,12 @@ function App() {
               <section className="step1-map-panel step1-map-picker">
                 <div className="section-heading">
                   <h4>地图选择</h4>
-                  <span className="muted">打开下拉框时会重新扫描 CARLA 地图库</span>
+                  <span className="muted">地图列表每 20 秒自动刷新，或点击刷新按钮手动更新</span>
                 </div>
                 <label>
                   地图
                   <select
                     value={selectedMap}
-                    onFocus={() => void loadMapCatalog(false)}
                     onChange={(event) => setSelectedMap(event.target.value)}
                   >
                     {mapOptions.map((item) => (
@@ -1122,10 +1247,7 @@ function App() {
                     <strong>{selectedMap || "未选择地图"}</strong>
                     <p className="muted">将作为 read waypoints 的目标地图</p>
                   </article>
-                  <div className="step1-map-inline-meta">
-                    <span className="step1-map-chip">默认优先：当前 world</span>
-                    <span className="step1-map-chip">来源：CARLA `.umap` 主地图</span>
-                  </div>
+  
                 </div>
               </section>
 
@@ -1339,15 +1461,23 @@ function App() {
                     checked={selectedStandards.includes(item.id)}
                     onChange={() => toggleStandard(item.id)}
                   />
-                  <span>
+                  <span className="checkbox-card-label">
                     {item.id}. {item.name}
                   </span>
                 </label>
               ))}
             </div>
-            <p className="muted">
-              选中的标准会在 Step 3-5 里各自生成一张工作卡片，之后可分别重复 route / scenario / export。
-            </p>
+            <div className="standards-footer">
+              <p className="muted">
+                选中的标准会在 Step 3-5 里各自生成一张工作卡片，之后可分别重复 route / scenario / export。
+              </p>
+              <button
+                disabled={selectedStandards.length === 0}
+                onClick={() => setSelectedStep(3)}
+              >
+                下一步 →
+              </button>
+            </div>
           </section>
         ) : null}
 
@@ -1357,163 +1487,325 @@ function App() {
             {selectedStandards.length === 0 ? (
               <p className="muted">先回到 Step 2 勾选一个或多个标准功能场景。</p>
             ) : null}
+            {/* Sub-step tabs */}
+            {selectedCards.length > 0 && (
+              <div className="substep-tabs">
+                {(["route", "scenario", "export"] as CardSubStep[]).map((s, i) => {
+                  const labels = ["Step 3 · 路线绘制", "Step 4 · Trigger/Actor", "Step 5 · 导出路线"];
+                  const doneCount = s === "route"
+                    ? selectedCards.filter(c => c.route_count > 0).length
+                    : s === "scenario"
+                    ? selectedCards.filter(c => c.scenario_count > 0 && c.sides_count > 0).length
+                    : selectedCards.filter(c => c.export_status === "Export Ready").length;
+                  return (
+                    <button
+                      key={s}
+                      className={`substep-tab${cardSubStep === s ? " substep-tab--active" : ""}`}
+                      onClick={() => setCardSubStep(s)}
+                    >
+                      {labels[i]}
+                      <span className="substep-tab-badge">{doneCount}/{selectedCards.length}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="cards-grid">
               {selectedCards.map((card) => (
                 <StandardCard
                   key={card.scenario_id}
                   card={card}
+                  subStep={cardSubStep}
                   onRoute={handleRouteEditor}
                   onScenario={handleScenarioEditor}
                   onExport={handleExport}
+                  onClearRoute={handleClearRoute}
+                  onClearScenario={handleClearScenario}
                 />
               ))}
             </div>
+            {selectedCards.length > 0 && selectedReadyCards.length === selectedCards.length && (
+              <div className="standards-footer">
+                <p className="muted">
+                  全部 {selectedCards.length} 个标准均已达到 Run Ready，可以进入 Step 6 开始评测。
+                </p>
+                <button onClick={() => setSelectedStep(4)}>前往 Step 6 · 运行中心 →</button>
+              </div>
+            )}
           </section>
         ) : null}
 
         {selectedStep === 4 ? (
           <section className="panel">
             <h3>Step 6. 运行中心</h3>
-            <div className="form-grid">
-              <label>
-                Agent
-                <select
-                  value={runForm.agent_name}
-                  onChange={(event) => setRunForm({ ...runForm, agent_name: event.target.value })}
+            {runFormCollapsed ? (
+              <div className="run-form-summary">
+                <div className="run-form-summary-chips">
+                  <span className="task-chip">{runForm.agent_name}</span>
+                  <span className="task-chip">{runForm.scenario_template}</span>
+                  {runScenarioId !== "" && <span className="task-chip">S{String(runScenarioId).padStart(2, "0")}</span>}
+                  <span className="task-chip">{runForm.exp_name}</span>
+                  <span className="task-chip">seed {runForm.seed}</span>
+                  {runForm.route_id && <span className="task-chip">route {runForm.route_id}</span>}
+                  {runForm.render && <span className="task-chip">render</span>}
+                  {runForm.save_video && <span className="task-chip">video</span>}
+                </div>
+                <button
+                  type="button"
+                  className="secondary-button run-form-expand-btn"
+                  onClick={() => setRunFormCollapsed(false)}
                 >
-                  {options?.agents.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.id} ({item.policy_type})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                运行模板
-                <select
-                  value={runForm.scenario_template}
-                  onChange={(event) =>
-                    setRunForm({ ...runForm, scenario_template: event.target.value })
-                  }
-                >
-                  {options?.scenario_templates.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.id} ({item.policy_type})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                目标标准
-                <select
-                  id="run-standard-select"
-                  value={runScenarioId}
-                  onChange={(event) =>
-                    setRunScenarioId(event.target.value === "" ? "" : Number(event.target.value))
-                  }
-                >
-                  <option value="">请选择</option>
-                  {selectedReadyCards.map((card) => (
-                    <option key={card.scenario_id} value={card.scenario_id}>
-                      {card.scenario_id}. {card.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                实验名
-                <input
-                  value={runForm.exp_name}
-                  onChange={(event) => setRunForm({ ...runForm, exp_name: event.target.value })}
-                />
-              </label>
-              <label>
-                Seed
-                <input
-                  type="number"
-                  value={runForm.seed}
-                  onChange={(event) => setRunForm({ ...runForm, seed: Number(event.target.value) })}
-                />
-              </label>
-              <label>
-                Route ID
-                <input
-                  placeholder="默认 null"
-                  value={runForm.route_id}
-                  onChange={(event) => setRunForm({ ...runForm, route_id: event.target.value })}
-                />
-              </label>
-              <label>
-                CARLA Port
-                <input
-                  type="number"
-                  value={runForm.port}
-                  onChange={(event) => setRunForm({ ...runForm, port: Number(event.target.value) })}
-                />
-              </label>
-              <label>
-                TM Port
-                <input
-                  type="number"
-                  value={runForm.tm_port}
-                  onChange={(event) => setRunForm({ ...runForm, tm_port: Number(event.target.value) })}
-                />
-              </label>
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={runForm.render}
-                  onChange={(event) => setRunForm({ ...runForm, render: event.target.checked })}
-                />
-                <span>Render</span>
-              </label>
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={runForm.save_video}
-                  onChange={(event) => setRunForm({ ...runForm, save_video: event.target.checked })}
-                />
-                <span>Save Video</span>
-              </label>
-            </div>
-            <div className="button-row">
+                  修改配置 ▾
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="form-grid">
+                  <label>
+                    Agent
+                    <select
+                      value={runForm.agent_name}
+                      onChange={(event) => setRunForm({ ...runForm, agent_name: event.target.value })}
+                    >
+                      {options?.agents.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.id} ({item.policy_type})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    运行模板
+                    <select
+                      value={runForm.scenario_template}
+                      onChange={(event) =>
+                        setRunForm({ ...runForm, scenario_template: event.target.value })
+                      }
+                    >
+                      {options?.scenario_templates.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.id} ({item.policy_type})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    目标标准
+                    <select
+                      id="run-standard-select"
+                      value={runScenarioId}
+                      onChange={(event) =>
+                        setRunScenarioId(event.target.value === "" ? "" : Number(event.target.value))
+                      }
+                    >
+                      <option value="">请选择</option>
+                      {selectedReadyCards.map((card) => (
+                        <option key={card.scenario_id} value={card.scenario_id}>
+                          {card.scenario_id}. {card.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    实验名
+                    <input
+                      value={runForm.exp_name}
+                      onChange={(event) => setRunForm({ ...runForm, exp_name: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Seed
+                    <input
+                      type="number"
+                      value={runForm.seed}
+                      onChange={(event) => setRunForm({ ...runForm, seed: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label>
+                    Route ID
+                    <input
+                      placeholder="默认 null"
+                      value={runForm.route_id}
+                      onChange={(event) => setRunForm({ ...runForm, route_id: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    CARLA Port
+                    <input
+                      type="number"
+                      value={runForm.port}
+                      onChange={(event) => setRunForm({ ...runForm, port: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label>
+                    TM Port
+                    <input
+                      type="number"
+                      value={runForm.tm_port}
+                      onChange={(event) => setRunForm({ ...runForm, tm_port: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={runForm.render}
+                      onChange={(event) => setRunForm({ ...runForm, render: event.target.checked })}
+                    />
+                    <span>Render</span>
+                  </label>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={runForm.save_video}
+                      onChange={(event) => setRunForm({ ...runForm, save_video: event.target.checked })}
+                    />
+                    <span>Save Video</span>
+                  </label>
+                </div>
+                <div className="button-row">
                   <button onClick={handleRun} disabled={selectedReadyCards.length === 0}>
                     启动评测
                   </button>
                 </div>
-            <p className="muted">
-              第一版只支持单个 agent 单次运行。续跑请到 Step 7 按实验恢复。
-            </p>
+              </>
+            )}
+            {experimentDetail ? (
+              <section className="run-center-monitor">
+                <div className="run-center-monitor-header">
+                  <div>
+                    <p className="eyebrow">实时监控</p>
+                    <h4>{experimentDetail.manifest.exp_name}</h4>
+                  </div>
+                  <div className="run-center-monitor-meta">
+                    <span>{experimentDetail.manifest.map} · S{experimentDetail.manifest.scenario_id.toString().padStart(2, "0")} · seed {experimentDetail.manifest.seed}</span>
+                    {experimentFocusJob && (
+                      <span className={`status-pill mini status-${experimentFocusJob.status}`}>
+                        {experimentFocusJob.type} · {experimentFocusJob.status}
+                        {experimentFocusJob.pid ? ` · PID ${experimentFocusJob.pid}` : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="run-center-monitor-progress">
+                  <strong>{experimentDetail.progress.records_count} / {experimentDetail.progress.total_data}</strong>
+                  <span>已完成 · 剩余 {experimentDetail.progress.remaining_count} 条</span>
+                </div>
+                {Object.keys(experimentDetail.results).length > 0 && (
+                  <div className="metrics-grid run-center-metrics">
+                    {Object.entries(experimentDetail.results).map(([key, value]) => (
+                      <article key={key} className="metric-card">
+                        <span>{key}</span>
+                        <strong>{value}</strong>
+                      </article>
+                    ))}
+                  </div>
+                )}
+                {experimentFocusJob?.error && (
+                  <div className="experiment-log-alert error">
+                    <strong>任务返回错误</strong>
+                    <p>{experimentFocusJob.error}</p>
+                  </div>
+                )}
+                {experimentDetail.progress.probe_error && (
+                  <div className="experiment-log-alert error">
+                    <strong>结果探测异常</strong>
+                    <p>{experimentDetail.progress.probe_error}</p>
+                  </div>
+                )}
+                {experimentJobLog.length > 0 && (
+                  <div className="log-panel run-center-log">
+                    <pre>{experimentJobLog.slice(-40).join("\n")}</pre>
+                  </div>
+                )}
+                <div className="button-row">
+                  <button
+                    className="secondary-button"
+                    onClick={() => handleOpenExperiment(experimentDetail.manifest.experiment_id)}
+                  >
+                    实验记录 →
+                  </button>
+                  {experimentFocusJob && (
+                    <button
+                      className="secondary-button danger-button"
+                      onClick={() => handleStopJob(experimentFocusJob.id)}
+                      disabled={experimentFocusJob.status !== "running" && experimentFocusJob.status !== "starting"}
+                    >
+                      停止任务
+                    </button>
+                  )}
+                  <button
+                    className="secondary-button"
+                    onClick={() => handleRerunExperiment(experimentDetail.manifest.experiment_id)}
+                  >
+                    重新运行
+                  </button>
+                  <button
+                    onClick={() => handleResumeExperiment(experimentDetail.manifest.experiment_id)}
+                    disabled={!experimentDetail.progress.resume_ready}
+                  >
+                    继续运行
+                  </button>
+                </div>
+              </section>
+            ) : (
+              <p className="muted">
+                启动评测后将在此处显示实时进度与日志。续跑请到 Step 7 实验记录。
+              </p>
+            )}
           </section>
         ) : null}
 
         {selectedStep === 5 ? (
           <section className="panel">
-            <h3>Step 7. 结果与续跑</h3>
+            <h3>Step 7. 实验记录</h3>
             <ExperimentList
               experiments={experiments}
               selectedExperimentId={selectedExperimentId}
               detail={experimentDetail}
-              focusJob={experimentFocusJob}
-              focusJobLog={experimentJobLog}
+              activeTab={step7Tab}
               onSelect={setSelectedExperimentId}
               onResume={handleResumeExperiment}
               onRerun={handleRerunExperiment}
+              onTabChange={setStep7Tab}
             />
           </section>
         ) : null}
       </main>
 
-      <TaskConsole
-        jobs={jobs}
-        activeJobId={activeJobId}
-        activeJobLog={activeJobLog}
-        viewMode={taskConsoleView}
-        onSelectJob={setActiveJobId}
-        onChangeView={setTaskConsoleView}
-        onPauseJob={handlePauseJob}
-        onStopJob={handleStopJob}
-      />
+      <div className="right-rail">
+        <div className="right-rail-toggle">
+          <div className="task-console-switch">
+            <button
+              className={`task-tab-button ${rightPanel === "guide" ? "active" : ""}`}
+              onClick={() => setRightPanel("guide")}
+            >
+              操作指引
+            </button>
+            <button
+              className={`task-tab-button ${rightPanel === "console" ? "active" : ""}${runningJobs.length > 0 ? " has-badge" : ""}`}
+              onClick={() => setRightPanel("console")}
+            >
+              任务监控{runningJobs.length > 0 ? <span className="rail-badge">{runningJobs.length}</span> : null}
+            </button>
+          </div>
+        </div>
+        {rightPanel === "guide" ? (
+          <div className="step-guide-panel">
+            {STEP_GUIDES[selectedStep]}
+          </div>
+        ) : (
+          <TaskConsole
+            jobs={jobs}
+            activeJobId={activeJobId}
+            activeJobLog={activeJobLog}
+            viewMode={taskConsoleView}
+            onSelectJob={setActiveJobId}
+            onChangeView={setTaskConsoleView}
+            onPauseJob={handlePauseJob}
+            onStopJob={handleStopJob}
+          />
+        )}
+      </div>
 
       {runtimeAlert ? (
         <div className="app-modal-overlay" onClick={() => setRuntimeAlert(null)}>

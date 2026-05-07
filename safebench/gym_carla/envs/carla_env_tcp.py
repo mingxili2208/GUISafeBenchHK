@@ -57,6 +57,17 @@ class CarlaEnvTCP(gym.Env):
         self.camera_sensor = None
         self.lidar_data = None
         self.lidar_height = 2.1
+
+        # Save sync settings at init so reset() can restore them after cleanup
+        # (cleanup disables sync mode temporarily; without restoration the simulation
+        # runs in async mode for the new episode, making world.tick() non-blocking)
+        try:
+            _init_settings = self.world.get_settings()
+            self._restore_sync_mode = _init_settings.synchronous_mode
+            self._restore_fixed_delta = _init_settings.fixed_delta_seconds
+        except Exception:
+            self._restore_sync_mode = False
+            self._restore_fixed_delta = None
         
         # TCP相机图像（原始尺寸）
         self.camera_img_raw = None
@@ -198,7 +209,37 @@ class CarlaEnvTCP(gym.Env):
         self.config = config
         self.env_id = env_id
 
+        # Snapshot sync settings RIGHT BEFORE cleanup so we can restore them
+        # after cleanup disables sync mode.  _restore_sync_mode captured at
+        # __init__ is unreliable because sync mode is typically enabled AFTER
+        # the env object is constructed, so it was always False there.
+        _was_sync = False
+        _was_delta = None
+        try:
+            _pre_settings = self.world.get_settings()
+            _was_sync = _pre_settings.synchronous_mode
+            _was_delta = _pre_settings.fixed_delta_seconds
+        except Exception:
+            pass
+
         self._cleanup_runtime_actors(prefix='Reset pre-cleanup')
+
+        # Re-enable synchronous mode that cleanup just disabled.  In async mode
+        # world.tick() returns immediately without waiting for the server, so the
+        # inter-sensor tick in _attach_sensor() would not advance the frame and
+        # the collision + camera sensors would land in the same server frame,
+        # causing the streaming fd race → close(EBADF) → SIGSEGV.
+        if _was_sync:
+            try:
+                _settings = self.world.get_settings()
+                if not _settings.synchronous_mode:
+                    _settings.synchronous_mode = True
+                    _settings.fixed_delta_seconds = _was_delta
+                    self.world.apply_settings(_settings)
+                    CarlaDataProvider._sync_flag = True
+            except Exception as _sync_err:
+                if self.logger is not None:
+                    self.logger.log(f'>> reset: failed to restore sync mode: {_sync_err}', color='yellow')
 
         self._create_sensors()
         self._create_scenario(config, env_id)
@@ -228,10 +269,30 @@ class CarlaEnvTCP(gym.Env):
             self.world.tick()
         return self._get_obs(), self._get_info()
 
+    def _wait_sensor_first_data(self, attr_name, timeout_ticks=10):
+        """Tick world until self.<attr_name> is not None.
+
+        Each CARLA sensor's streaming socket is established asynchronously after
+        spawn_actor() returns.  Ticking until the first data packet arrives
+        confirms the socket is fully set up end-to-end, making it safe to spawn
+        the next sensor without risking a streaming-fd double-close race.
+        """
+        import time as _time_mod
+        for _ in range(timeout_ticks):
+            try:
+                self.world.tick()
+            except Exception as _tick_err:
+                if self.logger is not None:
+                    self.logger.log(f'>> _wait_sensor_first_data tick failed: {_tick_err}', color='yellow')
+                _time_mod.sleep(0.1)
+            if getattr(self, attr_name, None) is not None:
+                return
+
     def _attach_sensor(self):
-        # Add collision sensor
-        self.collision_sensor = self.world.spawn_actor(self.collision_bp, carla.Transform(), attach_to=self.ego_vehicle)
-        self.collision_sensor.listen(lambda event: get_collision_hist(event))
+        # ── Collision sensor ──────────────────────────────────────────────
+        # Define callback before listen() so it is bound in the local scope
+        # before any tick can deliver data on a background thread.
+        self.collision_hist = []
 
         def get_collision_hist(event):
             impulse = event.normal_impulse
@@ -239,19 +300,31 @@ class CarlaEnvTCP(gym.Env):
             self.collision_hist.append(intensity)
             if len(self.collision_hist) > self.collision_hist_l:
                 self.collision_hist.pop(0)
-        self.collision_hist = []
 
-        # Add lidar sensor
+        self.collision_sensor = self.world.spawn_actor(self.collision_bp, carla.Transform(), attach_to=self.ego_vehicle)
+        self.collision_sensor.listen(get_collision_hist)
+        # Collision sensor only fires on collision events, so we cannot wait for
+        # data to confirm readiness.  A single tick gives CARLA's async
+        # streaming-socket setup time to start before the next sensor is spawned.
+        self.world.tick()
+
+        # ── Lidar sensor ──────────────────────────────────────────────────
         if self.scenario_category != 'perception' and not self.disable_lidar:
+            self.lidar_data = None  # reset sentinel so _wait_sensor_first_data can detect arrival
+
+            def get_lidar_data(data):
+                self.lidar_data = data
+
             self.lidar_sensor = self.world.spawn_actor(self.lidar_bp, self.lidar_trans, attach_to=self.ego_vehicle)
-            self.lidar_sensor.listen(lambda data: get_lidar_data(data))
+            self.lidar_sensor.listen(get_lidar_data)
+            # Tick until the first lidar scan arrives.  Receiving actual data
+            # proves the streaming socket is fully established end-to-end, so
+            # spawning the camera sensor next cannot race on the same fd.
+            self._wait_sensor_first_data('lidar_data')
 
-        def get_lidar_data(data):
-            self.lidar_data = data
-
-        # Add camera sensor (TCP配置)
-        self.camera_sensor = self.world.spawn_actor(self.camera_bp, self.camera_trans, attach_to=self.ego_vehicle)
-        self.camera_sensor.listen(lambda data: get_camera_img(data))
+        # ── Camera sensor ─────────────────────────────────────────────────
+        # Reset to None so _wait_sensor_first_data can detect first-frame arrival.
+        self.camera_img = None
 
         def get_camera_img(data):
             array = np.frombuffer(data.raw_data, dtype=np.dtype("uint8"))
@@ -260,6 +333,11 @@ class CarlaEnvTCP(gym.Env):
             array = array[:, :, ::-1]
             self.camera_img = array
             self.camera_img_raw = array.copy()
+
+        self.camera_sensor = self.world.spawn_actor(self.camera_bp, self.camera_trans, attach_to=self.ego_vehicle)
+        self.camera_sensor.listen(get_camera_img)
+        # Tick until the first camera frame arrives — streaming socket confirmed ready.
+        self._wait_sensor_first_data('camera_img')
 
     def step_before_tick(self, ego_action, scenario_action):
         if self.world:
@@ -635,8 +713,8 @@ class CarlaEnvTCP(gym.Env):
             if self.logger is not None:
                 self.logger.log(f'>> {prefix} sensor stop failed: {sensor_error}', color='yellow')
 
-        _dbg('Step 3: world.tick/wait_for_tick after sensor stop')
-        self._flush_cleanup_world()
+        _dbg('Step 3: world.tick/wait_for_tick after sensor stop (2 ticks)')
+        self._flush_cleanup_world(2)
         _dbg('Step 3: flush OK')
 
         _dbg('Step 4: destroying sensors (sensor.destroy RPC)')
@@ -648,8 +726,16 @@ class CarlaEnvTCP(gym.Env):
             if self.logger is not None:
                 self.logger.log(f'>> {prefix} sensor destroy failed: {sensor_error}', color='yellow')
 
-        _dbg('Step 5: world.tick/wait_for_tick after sensor destroy')
-        self._flush_cleanup_world()
+        _dbg('Step 5: world.tick/wait_for_tick after sensor destroy (3 ticks + 200ms sleep)')
+        # sensor.destroy() is a synchronous RPC (actor removed from simulation), but
+        # CARLA\'s streaming server closes the sensor\'s ASIO socket asynchronously on
+        # a background thread.  Without enough wall-clock time here, the socket fd can
+        # still be half-open when the next episode spawns sensors, leading to fd reuse
+        # races in the epoll reactor that accumulate across episodes and eventually
+        # corrupt descriptor_state* → SIGSEGV (address 0x3 or 0x90).
+        self._flush_cleanup_world(3)
+        import time as _time_cleanup
+        _time_cleanup.sleep(0.2)
         _dbg('Step 5: flush OK')
 
         _dbg('Step 6: scenario_manager.clean_up() -> criteria sensors, scenario actors, background vehicles')
@@ -685,6 +771,88 @@ class CarlaEnvTCP(gym.Env):
 
         _dbg('Step 11: clearing runtime caches')
         self._clear_runtime_caches()
+
+        # -----------------------------------------------------------------------
+        # PROBE A: 检查 CARLA world 里是否还有 sensor/vehicle actor 残留
+        # -----------------------------------------------------------------------
+        _dbg('Step 12 [PROBE-A]: residual actors in CARLA world after cleanup')
+        try:
+            all_actors = self.world.get_actors()
+            sensors  = [a for a in all_actors if a.type_id.startswith('sensor.')]
+            vehicles = [a for a in all_actors if a.type_id.startswith('vehicle.')]
+            walkers  = [a for a in all_actors if a.type_id.startswith('walker.')]
+            _dbg(f'  sensors={len(sensors)} vehicles={len(vehicles)} walkers={len(walkers)}')
+            for s in sensors:
+                _dbg(f'  RESIDUAL SENSOR: id={s.id} type={s.type_id} alive={s.is_alive}')
+            if sensors:
+                _dbg(f'  WARNING: {len(sensors)} sensors still alive → possible actor leak')
+        except Exception as _probe_err:
+            _dbg(f'  PROBE-A FAILED: {_probe_err}')
+
+        # -----------------------------------------------------------------------
+        # PROBE B: 统计本进程 TCP socket fd 数量
+        # CARLA sensor streaming 用 TCP。如果每轮 cleanup 后 TCP fd 数量递增，
+        # 说明 ASIO 后台线程还没把旧 socket 关完 → 下一轮 epoll_reactor 遇到半关闭的 fd → SIGSEGV
+        # -----------------------------------------------------------------------
+        _dbg('Step 12 [PROBE-B]: TCP socket fd count in this process (sensor streaming leak indicator)')
+        try:
+            import os as _os
+            import socket as _socket
+            tcp_fds = []
+            fd_dir = f'/proc/{_os.getpid()}/fd'
+            for _fd_name in _os.listdir(fd_dir):
+                try:
+                    _fd_path = _os.readlink(f'{fd_dir}/{_fd_name}')
+                    if 'socket' in _fd_path:
+                        _fd_num = int(_fd_name)
+                        try:
+                            _sock = _socket.fromfd(_fd_num, _socket.AF_INET, _socket.SOCK_STREAM)
+                            _peer = _sock.getpeername()
+                            _sock.detach()  # don't close original fd
+                            tcp_fds.append((_fd_num, _fd_path, str(_peer)))
+                        except Exception:
+                            tcp_fds.append((_fd_num, _fd_path, '(not TCP or not connected)'))
+                except (OSError, ValueError):
+                    continue
+            _dbg(f'  total socket fds: {len(tcp_fds)}')
+            for _fd_num, _fd_path, _peer in tcp_fds:
+                _dbg(f'    fd={_fd_num}  {_fd_path}  peer={_peer}')
+            if len(tcp_fds) > 10:
+                _dbg(f'  WARNING: {len(tcp_fds)} socket fds — may indicate streaming socket leak')
+        except Exception as _probe_b_err:
+            _dbg(f'  PROBE-B FAILED: {_probe_b_err}')
+
+        # -----------------------------------------------------------------------
+        # PROBE C: 检查 CARLA server 端 TCP 连接状态（ss/netstat）
+        # 看是否有 CLOSE_WAIT / TIME_WAIT 状态的连接在 2000/2001 端口上堆积
+        # -----------------------------------------------------------------------
+        _dbg('Step 12 [PROBE-C]: CARLA RPC/streaming port connection states (port 2000-2002)')
+        try:
+            import subprocess as _sp
+            _r = _sp.run(
+                ['ss', '-tnp', 'sport', '=', ':2000', 'or', 'sport', '=', ':2001', 'or',
+                 'dport', '=', ':2000', 'or', 'dport', '=', ':2001'],
+                capture_output=True, text=True, timeout=3
+            )
+            _lines = [l for l in _r.stdout.splitlines() if l.strip()]
+            _dbg(f'  ss output ({len(_lines)} lines):')
+            for _l in _lines[:20]:
+                _dbg(f'    {_l}')
+            # 统计各状态
+            import re as _re
+            _states = {}
+            for _l in _lines:
+                _m = _re.match(r'(\S+)\s', _l)
+                if _m:
+                    _s = _m.group(1)
+                    _states[_s] = _states.get(_s, 0) + 1
+            _dbg(f'  state summary: {_states}')
+            if _states.get('CLOSE-WAIT', 0) + _states.get('TIME-WAIT', 0) > 5:
+                _dbg(f'  WARNING: many half-closed connections → streaming teardown incomplete')
+        except Exception as _probe_c_err:
+            _dbg(f'  PROBE-C FAILED: {_probe_c_err}')
+        # -----------------------------------------------------------------------
+
         _dbg(f'=== {prefix} DONE ===')
 
     def clean_up(self):
