@@ -62,11 +62,16 @@ pip install /path/to/carla/PythonAPI/carla/dist/carla-*-cp38-cp38-linux_x86_64.w
 
 > **重要**：CARLA Python API 的 wheel 文件名中包含 Python 版本标记（如 `cp38`），必须与 conda 环境的 Python 版本完全一致，否则安装会失败或运行时报 import 错误。若编译时使用的是其他 Python 版本，需相应调整第 2 步的 `conda create` 命令。
 
-### 第 4 步（可选）：安装前端依赖
+### 第 4 步：安装 GUI 控制台依赖
 
-仅在使用 GUI 控制台时需要：
+仅在首次使用 GUI 控制台时需要（与核心评测功能无关，可跳过）：
 
 ```bash
+# 后端 Python 依赖（FastAPI、uvicorn 等，与 requirements.txt 分离，按需安装）
+pip install -r gui_console/backend/requirements.txt
+
+# 前端 Node.js 依赖
+sudo apt install npm
 cd gui_console/frontend && npm install && cd ../..
 ```
 
