@@ -501,15 +501,34 @@ class CarlaRunner:
         return start_episode
 
     def close(self):
+        if self.logger:
+            self.logger.log('>> Task finished. Disconnecting from CARLA...', color='green')
+
         if self.world is not None:
-            settings = self.world.get_settings()
-            settings.synchronous_mode = False
-            settings.fixed_delta_seconds = None
-            self.world.apply_settings(settings)
+            try:
+                settings = self.world.get_settings()
+                settings.synchronous_mode = False
+                settings.fixed_delta_seconds = None
+                self.world.apply_settings(settings)
+                # apply_settings() in synchronous mode only queues the change; the
+                # server does NOT switch to async until it receives a tick().
+                # Without this tick, env.clean_up() → _flush_cleanup_world() sees
+                # synchronous_mode=False in the client cache and calls
+                # world.wait_for_tick(), but the server is still in sync mode and
+                # will never self-advance → wait_for_tick() hangs for 120 s →
+                # TimeoutException / std::terminate.
+                self.world.tick()
+            except Exception as settings_error:
+                if self.logger:
+                    self.logger.log(f'>> close(): failed to disable sync mode: {settings_error}', color='yellow')
 
         pygame.quit()
         if self.env:
             try:
                 self.env.clean_up()
             except Exception as cleanup_error:
-                self.logger.log(f'>> Final environment cleanup failed: {cleanup_error}', 'red')
+                if self.logger:
+                    self.logger.log(f'>> Final environment cleanup failed: {cleanup_error}', color='red')
+
+        if self.logger:
+            self.logger.log('>> CARLA connection released. Exiting.', color='green')

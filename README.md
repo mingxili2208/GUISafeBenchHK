@@ -221,6 +221,29 @@ bash gui_console/bin/stop_console.sh
 
 启动后访问 `http://127.0.0.1:5173`。详细使用说明见 [doc/GUI/build_gui.md](doc/GUI/build_gui.md)。
 
+## 故障排除
+
+### CARLA 崩溃（SIGSEGV / SIGABRT）
+
+SafeBench 在多 episode 连续运行时（通常第 4–5 个 episode），可能触发 CARLA 进程崩溃，表现为：
+
+- 终端出现 `SIGSEGV` 或 `SIGABRT` 信号
+- CARLA 窗口直接退出或卡死
+- 错误堆栈包含 `carla::throw_exception` / `rpc::detail::server_session::close`
+
+**根本原因**：rpclib TCP socket 存在多线程并发 double-close 竞态，需修改 CARLA 源码并重新编译。
+
+根据使用方式选择修复文档：
+
+| 方式 | 文档 | 适用场景 |
+|------|------|----------|
+| AI 工具（Vibe Coding） | [carla_ebadf_vibe_coding.md](doc/manual/carla_ebadf_vibe_coding.md) | 让 AI 完成所有代码改动，人工执行 `make launch` |
+| 手动修改 | [carla_ebadf_manual_guide.md](doc/manual/carla_ebadf_manual_guide.md) | 逐步操作说明，含原因解释和完整命令 |
+
+> 技术背景与完整分析见 [carla_ebadf_fix_complete.md](doc/manual/carla_ebadf_fix_complete.md)。
+
+---
+
 ## 延伸阅读
 
 - [doc/manual/user_manual.md](doc/manual/user_manual.md)：完整使用手册，含自定义场景制作全流程

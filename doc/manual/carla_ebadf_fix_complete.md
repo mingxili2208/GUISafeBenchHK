@@ -3,6 +3,10 @@
 > 最后更新：2026-05-06  
 > 修复范围：CARLA C++ 源码 (Carla.cpp, rpclib) + SafeBench Python 防御
 
+> **路径约定**：本文档中的所有路径均使用以下环境变量，请在执行命令前设置：
+> - `$CARLA_UE4_ROOT`：CARLA 源码根目录（含 `Makefile` 和 `Unreal/` 子目录），每台安装了 CARLA 的设备应已设置此变量，例如 `/home/<user>/Carla/carla`
+> - `$UE4_ROOT`：UE4 引擎根目录，需根据本机路径手动设置，例如 `/home/<user>/UnrealEngine/UnrealEngine_4.26`
+
 ---
 
 ## 问题描述
@@ -178,11 +182,11 @@ void server_session::do_read() {
 > **注意**：编译时不能使用 `-fno-exceptions`，因为 rpclib 头文件 `this_handler.inl` 含有 `throw` 语句。
 
 ```bash
-CLANG=/home/fsm/UnrealEngine/UnrealEngine_4.26/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v17_clang-10.0.1-centos7/x86_64-unknown-linux-gnu/bin/clang++
-SYSROOT=/home/fsm/UnrealEngine/UnrealEngine_4.26/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v17_clang-10.0.1-centos7/x86_64-unknown-linux-gnu
-LIBCXX=/home/fsm/UnrealEngine/UnrealEngine_4.26/Engine/Source/ThirdParty/Linux/LibCxx/include/c++/v1
-RPCLIB_INC=/home/fsm/Carla/carla/Build/rpclib-v2.2.1_c5-c10-libcxx-install/include
-BOOST_INC=/home/fsm/Carla/carla/Build/boost-1.84.0-c10-install/include
+CLANG="$UE4_ROOT/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v17_clang-10.0.1-centos7/x86_64-unknown-linux-gnu/bin/clang++"
+SYSROOT="$UE4_ROOT/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v17_clang-10.0.1-centos7/x86_64-unknown-linux-gnu"
+LIBCXX="$UE4_ROOT/Engine/Source/ThirdParty/Linux/LibCxx/include/c++/v1"
+RPCLIB_INC="$CARLA_UE4_ROOT/Build/rpclib-v2.2.1_c5-c10-libcxx-install/include"
+BOOST_INC="$CARLA_UE4_ROOT/Build/boost-1.84.0-c10-install/include"
 
 $CLANG -std=c++14 -fPIC -stdlib=libc++ \
   -isystem "$LIBCXX" --sysroot="$SYSROOT" \
@@ -196,8 +200,8 @@ $CLANG -std=c++14 -fPIC -stdlib=libc++ \
 
 # 替换两个 librpc.a
 for LIB in \
-  .../rpclib-v2.2.1_c5-c10-libcxx-install/lib/librpc.a \
-  .../rpclib-v2.2.1_c5-c10-libstdcxx-install/lib/librpc.a; do
+  "$CARLA_UE4_ROOT/Build/rpclib-v2.2.1_c5-c10-libcxx-install/lib/librpc.a" \
+  "$CARLA_UE4_ROOT/Build/rpclib-v2.2.1_c5-c10-libstdcxx-install/lib/librpc.a"; do
   ar d "$LIB" server_session.cc.o
   ar r "$LIB" /tmp/server_session.cc.o
 done
@@ -288,11 +292,11 @@ time.sleep(5)  # ← 新增：等待 CARLA 清理
 pkill -f CarlaUE4
 
 # 2. 从源码重建 + 启动
-cd /home/fsm/Carla/carla
+cd "$CARLA_UE4_ROOT"
 make launch
 
 # 3. 在另一个终端运行 SafeBench
-cd /home/fsm/GUISafeBenchHK
+cd /path/to/GUISafeBenchHK
 python scripts/run.py --mode eval --agent behavior --scenario standard --seed 0
 ```
 
