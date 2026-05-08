@@ -317,17 +317,56 @@ def _candidate_carla_content_roots(carla_root: Path) -> List[Path]:
     return [path for path in candidates if path.exists()]
 
 
-def discover_carla_root() -> Optional[Path]:
-    shell_exports = _load_shell_exports(Path.home() / ".bashrc")
+def _collect_carla_root_candidates() -> List[str]:
+    """Gather CARLA root candidates from environment, shell configs, and common paths."""
     candidates: List[str] = []
+
+    # 1. environment variables (os.environ)
     for key in CARLA_ROOT_KEYS:
         value = os.environ.get(key)
         if value:
             candidates.append(value)
-    for key in CARLA_ROOT_KEYS:
-        value = shell_exports.get(key)
-        if value:
-            candidates.append(value)
+
+    # 2. shell configuration files (bashrc, profile, bash_profile)
+    for rc_name in (".bashrc", ".profile", ".bash_profile"):
+        shell_exports = _load_shell_exports(Path.home() / rc_name)
+        for key in CARLA_ROOT_KEYS:
+            value = shell_exports.get(key)
+            if value:
+                candidates.append(value)
+
+    # 3. try to infer CARLA root from the carla Python package location
+    try:
+        import carla  # type: ignore
+        carla_init = getattr(carla, "__file__", None)
+        if carla_init:
+            carla_pkg = Path(carla_init).resolve().parent
+            # carla package is typically at <carla_root>/PythonAPI/carla/
+            for ancestor in carla_pkg.parents:
+                if _candidate_carla_content_roots(ancestor):
+                    candidates.append(str(ancestor))
+                    break
+    except Exception:
+        pass
+
+    # 4. common CARLA installation paths (fallback)
+    home = Path.home()
+    common_paths = [
+        home / "carla",
+        home / "Carla" / "carla",
+        home / "Carla",
+        Path("/opt/carla"),
+        Path("/opt/Carla"),
+        Path("/usr/local/carla"),
+    ]
+    for p in common_paths:
+        candidates.append(str(p))
+
+    return candidates
+
+
+def discover_carla_root() -> Optional[Path]:
+    candidates = _collect_carla_root_candidates()
 
     seen = set()
     for value in candidates:

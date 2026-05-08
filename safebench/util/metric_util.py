@@ -225,7 +225,7 @@ def get_perception_scores(record_dict):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--record_file', default='/home/carla/output/testing_records/record.pkl')
+    parser.add_argument('--record_file', default=None, help='path to the record.pkl file')
     arguments = parser.parse_args()
     return arguments
 

@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 import json
 import shutil
+import sys
 from pathlib import Path
 
-base = Path('/home/hp/STF/GUISafeBenchHK/safebench/scenario/scenario_data/14C_2')
+# Use repo root to locate scenario data, falling back to cwd
+_repo_root = Path(__file__).resolve().parents[2]
+base = _repo_root / "safebench" / "scenario" / "scenario_data" / "14C_2"
+if not base.exists():
+    print(f"Default base not found: {base}", file=sys.stderr)
+    print("Pass the base directory as the first argument, e.g.:", file=sys.stderr)
+    print("  python update_standard_to_adv.py /path/to/scenario_data/14C_2", file=sys.stderr)
+    sys.exit(1)
 files = ['standard_scenario_01.json', 'standard_scenario_02.json']
 
 for fname in files:

@@ -108,6 +108,7 @@ const STEP_GUIDES: React.ReactNode[] = [
 
 function App() {
   const alertedRuntimeEventsRef = useRef<Set<string>>(new Set());
+  const waypointJobIdRef = useRef<string | null>(null);
   const [options, setOptions] = useState<OptionsResponse | null>(null);
   const [jobs, setJobs] = useState<JobInfo[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -694,6 +695,7 @@ function App() {
       setNotice(`已启动 waypoint 生成任务：${job.id}`);
       setTaskConsoleView("current");
       setActiveJobId(job.id);
+      waypointJobIdRef.current = job.id;
       await loadJobs();
       await loadMapStatus(selectedMap);
     } catch (fetchError) {
@@ -805,6 +807,8 @@ function App() {
       setRunFormCollapsed(true);
       const newExpId =
         typeof job.metadata?.experiment_id === "string" ? (job.metadata.experiment_id as string) : null;
+      setExperimentDetail(null);
+      setExperimentJobLog([]);
       if (newExpId) {
         setSelectedExperimentId(newExpId);
       }
@@ -964,8 +968,35 @@ function App() {
     }
   }, [runningJobs.length]);
 
+  // Watch for waypoint job completion and refresh cards + show success notice
+  useEffect(() => {
+    const waypointJobId = waypointJobIdRef.current;
+    if (!waypointJobId) return;
+    const waypointJob = jobs.find((j) => j.id === waypointJobId);
+    if (!waypointJob) return;
+    if (waypointJob.status === "finished") {
+      waypointJobIdRef.current = null;
+      setNotice(`Waypoint 生成任务 ${waypointJobId} 已完成，数据已就绪，可以继续下一步。`);
+      if (selectedMap) {
+        void loadMapStatus(selectedMap);
+        void loadCards(selectedMap);
+      }
+    } else if (waypointJob.status === "failed" || waypointJob.status === "stale") {
+      waypointJobIdRef.current = null;
+      setNotice(`Waypoint 生成任务 ${waypointJobId} 失败：${waypointJob.error ?? "未知错误"}。请查看任务日志后重试。`);
+    }
+  }, [jobs, selectedMap]);
+
   useEffect(() => {
     setRightPanel("guide");
+  }, [selectedStep]);
+
+  // Clear stale experiment detail when entering Step 6 so previous run data doesn't linger
+  useEffect(() => {
+    if (selectedStep === 4) {
+      setExperimentDetail(null);
+      setExperimentJobLog([]);
+    }
   }, [selectedStep]);
 
   useEffect(() => {
@@ -1553,7 +1584,11 @@ function App() {
                 <button
                   type="button"
                   className="secondary-button run-form-expand-btn"
-                  onClick={() => setRunFormCollapsed(false)}
+                  onClick={() => {
+                    setExperimentDetail(null);
+                    setExperimentJobLog([]);
+                    setRunFormCollapsed(false);
+                  }}
                 >
                   修改配置 ▾
                 </button>
