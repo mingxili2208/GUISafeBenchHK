@@ -465,14 +465,31 @@ class RouteScenario:
         # "Bad file descriptor" → SIGSEGV 服务端崩溃。
         _dbg(f'R8a: disabling autopilot for {len(valid_background_actor_ids)} background vehicles before destroy')
         tm_port = CarlaDataProvider.get_traffic_manager_port()
+        hung_ids = []
         for actor_id in valid_background_actor_ids:
             actor = CarlaDataProvider._carla_actor_pool.get(actor_id)
             if actor is None:
+                continue
+            # 关键：先检查 actor 是否还存活。R7→R8a 之间 CARLA 可能已经异步
+            # 销毁了某些 actor（如 pedestrian），对已死 actor 调用 set_autopilot
+            # 会导致 RPC 永久挂起，阻塞整个 cleanup 流程。
+            try:
+                if not actor.is_alive:
+                    _dbg(f'R8a: skip actor {actor_id} (already destroyed)')
+                    continue
+            except Exception as alive_error:
+                _dbg(f'R8a: is_alive check failed for {actor_id}: {alive_error}, skip')
                 continue
             try:
                 actor.set_autopilot(False, tm_port)
             except Exception as ap_error:
                 _dbg(f'R8a: set_autopilot(False) failed for {actor_id}: {ap_error}')
+                hung_ids.append(actor_id)
+        if hung_ids:
+            self.logger.log(
+                f'>> {len(hung_ids)} background vehicles failed autopilot-off during cleanup (ids: {hung_ids})',
+                'yellow',
+            )
         _dbg('R8a: autopilot disabled for all background vehicles')
 
         # 给 TM 一点时间处理 autopilot 关闭，再执行 destroy
