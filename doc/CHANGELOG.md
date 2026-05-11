@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-05-11 fix: 运行时弹窗在实验进行中反复出现
+
+### 问题描述
+
+实验正在正常运行时，实时监控中时不时弹出"运行任务失败"的错误弹窗。但实际上当前实验并未失败，弹窗内容是旧实验的失败信息。
+
+### 根因分析
+
+`App.tsx` 中的 `failed-job alert` useEffect 通过 `jobs.find((job) => job.status === "failed")` 查找失败任务，但 `jobs` 列表包含所有历史任务。当用户正在运行新实验时，旧的失败任务仍会在每次轮询（3秒）时被找到并触发弹窗。
+
+虽然有 `alertedRuntimeEventsRef` 去重机制防止同一任务重复弹窗，但在以下场景仍会弹出：
+- 不同的旧失败任务（每个有不同 ID）
+- 页面刷新后 ref 被重置，旧失败任务再次触发弹窗
+
+### 修复方案
+
+在 failed-job alert useEffect 中增加判断：当存在正在运行/启动中的任务时，不弹出旧失败任务的告警。只有当没有任何活跃任务且存在失败任务时，才弹出通知。
+
+| 文件 | 修改内容 |
+|---|---|
+| `gui_console/frontend/src/App.tsx` | failed-job useEffect 增加 `hasActiveJob` 检查，有活跃任务时跳过旧失败告警 |
+
+### 补充说明：pygame 窗口闪退与卡顿
+
+用户反馈点击"启动评测"后 pygame 窗口闪退，然后出现新窗口卡住几分钟后正常运行。分析如下：
+
+- `carla_runner.py` 初始化序列：`_init_world()` → `_init_renderer()`（创建 pygame 窗口）→ 创建 VectorWrapper → `eval()` 中首次 `env.reset()` 生成 actors
+- pygame 窗口在 `_init_renderer()` 时立即出现，但内容要等到 actors 全部生成后才能渲染，期间窗口为黑屏/无响应
+- 代码中只有一个 `pygame.display.set_mode()` 调用点，不存在创建两个窗口的逻辑
+- "两个窗口"可能是上一次实验进程未完全退出、或 CARLA 服务端窗口的视觉效果
+- **建议**：如不需要鸟瞰图，取消勾选 Step 6 运行表单中的 "render" 复选框
+
+---
+
 ## 2026-05-11 fix: Step 6 导出过期检测
 
 ### 问题描述

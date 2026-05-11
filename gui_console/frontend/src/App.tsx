@@ -582,6 +582,10 @@ function App() {
   }, [experimentFocusJob?.id, experimentJobLogPollMs]);
 
   useEffect(() => {
+    const hasActiveJob = jobs.some((job) => job.status === "running" || job.status === "starting");
+    if (hasActiveJob) {
+      return;
+    }
     const failedJob = jobs.find((job) => job.status === "failed");
     if (!failedJob) {
       return;
