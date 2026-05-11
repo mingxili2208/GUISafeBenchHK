@@ -186,10 +186,15 @@ export function StandardCard({ card, subStep, onRoute, onScenario, onExport, onC
           <span className="substep-label">Step 5 · 导出路线</span>
           {!scenarioDone
             ? <span className="substep-status substep-status--locked">需先完成 Trigger/Actor</span>
+            : card.export_stale
+            ? <span className="substep-status substep-status--stale">⚠ 导出已过期（源数据已更新）</span>
             : exportDone
-            ? <span className="substep-status substep-status--done">✓ 已导出</span>
+            ? <span className="substep-status substep-status--done">✓ 已导出（{card.export_route_count} 条）</span>
             : <span className="substep-status substep-status--missing">待导出</span>}
         </div>
+        {card.export_stale && (
+          <p className="stale-warning">路线或场景数据已更新，请重新导出以使 Step 6 使用最新数据。</p>
+        )}
         <p className="path">{card.paths.export_index_json?.path}</p>
         <div className="button-row">
           <button onClick={() => onExport(card.scenario_id, "standard")} disabled={!scenarioDone}>导出 Standard</button>

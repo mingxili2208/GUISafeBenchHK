@@ -667,6 +667,12 @@ pre {
   border: 1px solid rgba(158, 49, 35, 0.2);
 }
 
+.notice-warning {
+  background: rgba(184, 134, 11, 0.12);
+  border: 1px solid rgba(184, 134, 11, 0.25);
+  color: #6b4c00;
+}
+
 .app-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1208,6 +1214,11 @@ pre {
 .status-scenario-ready,
 .status-export-ready {
   background: rgba(25, 99, 93, 0.16);
+}
+
+.status-export-stale {
+  background: rgba(184, 134, 11, 0.18);
+  color: #7a5a00;
 }
 
 .status-paused,
@@ -2449,6 +2460,22 @@ pre {
 .substep-status--locked {
   color: var(--ink-soft);
   font-style: italic;
+}
+
+.substep-status--stale {
+  color: #b8860b;
+  font-weight: 600;
+}
+
+.stale-warning {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  background: #fdf6e3;
+  border-left: 3px solid #b8860b;
+  color: #6b4c00;
+  font-size: 0.85em;
+  line-height: 1.5;
+  border-radius: 3px;
 }
 
 /* ── Card header right column (pill + step dots) ─────────────────────── */

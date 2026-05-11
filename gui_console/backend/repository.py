@@ -636,6 +636,14 @@ def _latest_mtime(paths: Iterable[Path]) -> Optional[str]:
     return datetime.fromtimestamp(max(timestamps)).astimezone().isoformat(timespec="seconds")
 
 
+def _latest_mtime_raw(paths: Iterable[Path]) -> Optional[float]:
+    timestamps = []
+    for path in paths:
+        if path.exists():
+            timestamps.append(path.stat().st_mtime)
+    return max(timestamps) if timestamps else None
+
+
 def standard_cards(map_name: str, scenario_ids: Optional[List[int]] = None) -> List[Dict[str, Any]]:
     scenario_ids = scenario_ids or [item["id"] for item in settings.STANDARD_SCENARIOS]
     standard_lookup = {item["id"]: item["name"] for item in settings.STANDARD_SCENARIOS}
@@ -669,8 +677,19 @@ def standard_cards(map_name: str, scenario_ids: Optional[List[int]] = None) -> L
 
         export_ready = export_route_dir.exists() and export_scenario_json.exists() and export_index_json.exists()
         link_ready = run_link.exists() or run_link.is_symlink()
+
+        # Detect stale export: source data newer than exported data
+        source_mtime = _latest_mtime_raw([route_dir, scenario_dir])
+        export_mtime = _latest_mtime_raw([export_route_dir, export_scenario_json, export_index_json])
+        export_stale = bool(export_ready and source_mtime and export_mtime and source_mtime > export_mtime)
+
+        export_route_count = _count_files(export_route_dir, lambda name: name.endswith(".xml"))
+
         export_status = "Export Ready" if export_ready else "Export Missing"
-        if export_ready and link_ready:
+        if export_stale:
+            export_status = "Export Stale"
+            overall_status = "Export Stale"
+        elif export_ready and link_ready:
             overall_status = "Run Ready"
         elif export_ready:
             overall_status = "Export Ready"
@@ -692,6 +711,8 @@ def standard_cards(map_name: str, scenario_ids: Optional[List[int]] = None) -> L
                 "route_status": route_status,
                 "scenario_status": scenario_status,
                 "export_status": export_status,
+                "export_stale": export_stale,
+                "export_route_count": export_route_count,
                 "overall_status": overall_status,
                 "latest_updated_at": _latest_mtime(
                     [route_dir, scenario_dir, export_route_dir, export_scenario_json, export_index_json]

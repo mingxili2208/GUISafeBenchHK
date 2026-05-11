@@ -164,7 +164,10 @@ function App() {
   const selectedCards = selectedStandards.length
     ? cards.filter((card) => selectedStandards.includes(card.scenario_id))
     : [];
-  const selectedReadyCards = selectedCards.filter((card) => card.overall_status === "Run Ready");
+  const selectedReadyCards = selectedCards.filter(
+    (card) => card.overall_status === "Run Ready" && !card.export_stale
+  );
+  const selectedStaleCards = selectedCards.filter((card) => card.export_stale);
   const selectedExperiment =
     experiments.find((item) => item.manifest.experiment_id === selectedExperimentId) ?? null;
   const experimentFocusJob = pickExperimentFocusJob(experimentDetail);
@@ -1569,6 +1572,13 @@ function App() {
         {selectedStep === 4 ? (
           <section className="panel">
             <h3>Step 6. 运行中心</h3>
+            {selectedStaleCards.length > 0 && (
+              <div className="notice notice-warning">
+                以下标准导出已过期（源路线/场景数据已更新但未重新导出）：
+                {selectedStaleCards.map((card) => `S${card.scenario_id.toString().padStart(2, "0")} ${card.name}`).join("、")}
+                。请返回 Step 5 重新导出后再运行。
+              </div>
+            )}
             {runFormCollapsed ? (
               <div className="run-form-summary">
                 <div className="run-form-summary-chips">
