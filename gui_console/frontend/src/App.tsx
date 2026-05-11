@@ -76,8 +76,9 @@ const STEP_GUIDES: React.ReactNode[] = [
       <ul>
         <li><strong>左键点击</strong>：在地图上选取路径点 / Trigger / Actor 位置；再次点击同一点可取消选中。</li>
         <li><strong>右键点击</strong>：保存当前已选点为一条 route 或 scenario，保存后自动清空选点，可继续绘制下一条。</li>
-        <li><strong>R 键</strong>：将视角重置回地图中心。</li>
-        <li><strong>ESC</strong>：退出编辑器。请在按 ESC 前确认已通过右键保存所有需要的条目，未右键的当前选点不会自动保存。</li>
+        <li><strong>R 键</strong>：撤销 / 删除。如果有未保存的选点，清空当前选点；如果没有未保存的选点，删除上一条已保存的记录。</li>
+        <li><strong>Home 键</strong>：将视角重置回地图中心。</li>
+        <li><strong>ESC</strong>：自动保存当前选点（如果有效）并退出编辑器。</li>
       </ul>
       <p className="muted">鼠标滚轮可缩放地图；按住鼠标中键或拖动可平移视角。</p>
     </div>

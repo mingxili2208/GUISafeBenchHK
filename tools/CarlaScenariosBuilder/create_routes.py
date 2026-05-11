@@ -65,8 +65,8 @@ def _build_overlay_lines(config, selected_waypoints_idx, viewer, status_message)
     return [
         f"Map: {config.map}    Scenario: {config.scenario:02d}",
         (
-            "Left click: select/remove waypoint    Right click: save route    "
-            "Wheel: zoom    Middle drag: pan    ESC: exit"
+            "Left click: select/remove    Right click: save    "
+            "R: undo/delete    Home: reset view    ESC: auto-save & exit"
         ),
         (
             f"Selected points: {len(selected_waypoints_idx)}    "
@@ -132,9 +132,33 @@ def main(config):
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    if len(selected_waypoints_idx) >= 2 and config.route < 0:
+                        selected_waypoints = np.take(
+                            waypoints_sparse,
+                            np.array(selected_waypoints_idx),
+                            axis=0,
+                        )
+                        route_id, save_file = save_waypoints(config, save_dir, selected_waypoints)
+                        print(f"[auto-save] route {route_id:02d} saved to {save_file}")
                     running = False
                     break
                 if event.key == pygame.K_r:
+                    if selected_waypoints_idx:
+                        selected_waypoints_idx.clear()
+                        status_message = "Cleared current selection."
+                    else:
+                        existing = sorted(
+                            f for f in os.listdir(save_dir)
+                            if f.startswith("route_") and f.endswith(".npy")
+                        ) if os.path.isdir(save_dir) else []
+                        if existing:
+                            last_file = os.path.join(save_dir, existing[-1])
+                            os.remove(last_file)
+                            status_message = f"Deleted {existing[-1]}."
+                        else:
+                            status_message = "No routes to delete."
+                    changed = True
+                if event.key == pygame.K_HOME:
                     viewer.center = np.asarray(get_map_centers(config.map)[0], dtype=float)
                     viewer.scale = max(0.1, min(viewer.window_size) / (2.0 * DEFAULT_DIST))
                     status_message = "View reset."

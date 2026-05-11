@@ -68,8 +68,8 @@ def _build_overlay_lines(config, route_id, selected_route_waypoints_idx, selecte
     return [
         f"Map: {config.map}    Scenario: {config.scenario:02d}    Route: {route_id:02d}",
         (
-            "Left click: select/remove trigger or actor    Right click: save scenario    "
-            "Wheel: zoom    Middle drag: pan    ESC: exit"
+            "Left click: select/remove    Right click: save    "
+            "R: undo/delete    Home: reset view    ESC: auto-save & exit"
         ),
         (
             f"Route points: {len(selected_route_waypoints_idx)}    "
@@ -201,9 +201,59 @@ def main(config):
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    if len(selected_trigger_waypoints_idx) >= 1:
+                        selected_waypoints = np.take(
+                            waypoints_sparse,
+                            np.array(selected_trigger_waypoints_idx),
+                            axis=0,
+                        )
+                        start_wp = np.take(waypoints_sparse, selected_route_waypoints_idx[0], axis=0)
+                        end_wp = np.take(waypoints_sparse, selected_route_waypoints_idx[-1], axis=0)
+                        start_pos, end_pos = start_wp[:2], end_wp[:2]
+                        side_marks = []
+                        for i, wp in enumerate(selected_waypoints):
+                            actor_pos = wp[:2]
+                            cross = (
+                                (actor_pos[0] - start_pos[0]) * (end_pos[1] - start_pos[1])
+                                - (actor_pos[1] - start_pos[1]) * (end_pos[0] - start_pos[0])
+                            )
+                            if config.scenario in [3, 4, 5, 6, 7]:
+                                side_marks.append("center")
+                            elif cross > 0:
+                                side_marks.append("left")
+                                wp[4] = (wp[4] + 90) % 360
+                            elif cross < 0:
+                                side_marks.append("right")
+                                wp[4] = (wp[4] - 90) % 360
+                            else:
+                                side_marks.append("center")
+                            selected_waypoints[i] = wp
+                        scenario_cfg = argparse.Namespace(**vars(config))
+                        scenario_cfg.route_idx = route_ids[current_route_index]
+                        route_id, save_file = save_scenario(
+                            scenario_cfg, scenario_save_dir, selected_waypoints, np.array(side_marks),
+                        )
+                        print(f"[auto-save] scenario {route_id:02d} saved to {save_file}")
                     running = False
                     break
                 if event.key == pygame.K_r:
+                    if selected_trigger_waypoints_idx:
+                        selected_trigger_waypoints_idx.clear()
+                        status_message = "Cleared current selection."
+                    else:
+                        cur_route = route_ids[min(current_route_index, len(route_ids) - 1)]
+                        scenario_file = os.path.join(scenario_save_dir, f"scenario_{cur_route:02d}.npy")
+                        sides_file = os.path.join(scenario_save_dir, f"scenario_{cur_route:02d}_sides.npy")
+                        deleted = False
+                        if os.path.isfile(scenario_file):
+                            os.remove(scenario_file)
+                            deleted = True
+                        if os.path.isfile(sides_file):
+                            os.remove(sides_file)
+                            deleted = True
+                        status_message = f"Deleted scenario_{cur_route:02d}." if deleted else "No scenario to delete."
+                    changed = True
+                if event.key == pygame.K_HOME:
                     viewer.center = np.asarray(initial_center, dtype=float)
                     viewer.scale = max(0.1, min(viewer.window_size) / (2.0 * DEFAULT_DIST))
                     status_message = "View reset."

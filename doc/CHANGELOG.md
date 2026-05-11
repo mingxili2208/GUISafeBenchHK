@@ -70,3 +70,24 @@
 | `gui_console/backend/schemas.py` | 新增 `OpenDirRequest` schema |
 | `gui_console/frontend/src/components/StandardCard.tsx` | 每个 substep 的 button-row 中新增「查看文件」按钮，条件显示 |
 | `gui_console/frontend/src/App.tsx` | 新增 `handleOpenDir()` 并传入 StandardCard |
+
+---
+
+## 2026-05-11 feat: 路线/场景编辑器 R 键撤销 + ESC 自动保存
+
+### 功能说明
+
+**R 键撤销/删除**：在路线编辑器（create_routes）和场景编辑器（create_scenarios）中：
+- 如果有未保存的选点 → 清空当前选点（重新绘制）
+- 如果没有未保存的选点 → 删除上一条已保存的记录（撤销上次右键保存）
+- 原有的 R 键视角重置功能移至 **Home 键**
+
+**ESC 自动保存**：按 ESC 退出时，如果当前有有效选点（路线 >= 2 个点，场景 >= 1 个点），会自动保存后退出，不再丢失未保存的工作。
+
+### 修改文件
+
+| 文件 | 修改内容 |
+|---|---|
+| `tools/CarlaScenariosBuilder/create_routes.py` | R 键：清空选点或删除最后保存的路线文件；ESC 键：自动保存后退出；Home 键：视角重置；更新 overlay 提示文本 |
+| `tools/CarlaScenariosBuilder/create_scenarios.py` | R 键：清空选点或删除当前 route 对应的场景文件；ESC 键：自动保存后退出（含 side_marks 计算）；Home 键：视角重置；更新 overlay 提示文本 |
+| `gui_console/frontend/src/App.tsx` | 更新 Step 3-5 操作指南，反映新的快捷键说明 |
