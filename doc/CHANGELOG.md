@@ -91,3 +91,32 @@
 | `tools/CarlaScenariosBuilder/create_routes.py` | R 键：清空选点或删除最后保存的路线文件；ESC 键：自动保存后退出；Home 键：视角重置；更新 overlay 提示文本 |
 | `tools/CarlaScenariosBuilder/create_scenarios.py` | R 键：清空选点或删除当前 route 对应的场景文件；ESC 键：自动保存后退出（含 side_marks 计算）；Home 键：视角重置；更新 overlay 提示文本 |
 | `gui_console/frontend/src/App.tsx` | 更新 Step 3-5 操作指南，反映新的快捷键说明 |
+
+---
+
+## 2026-05-11 fix: Step 6 清除旧实验状态 + 显示计划运行数量
+
+### 问题描述
+
+1. 从 Step 5 进入 Step 6 后，仍然显示上次未跑完的实验结果（进度、日志、操作按钮），应该只显示新的运行表单。旧实验数据应只在 Step 7 查看。
+2. Step 6 运行表单没有显示计划运行多少次场景，用户无法在提交前确认数量。
+
+### 修复内容
+
+**Step 6 进入时清除旧状态**：
+- 从 Step 3-5 工作区（导航栏或「前往 Step 6」按钮）进入 Step 6 时，清除 `experimentDetail`、`selectedExperimentId`、`experimentJobLog`、`runFormCollapsed`
+- 从 Step 7 的续跑/重跑进入 Step 6 时不受影响（这些 handler 显式设置所需状态）
+
+**Step 6 显示计划运行数量**：
+- 后端 `standard_cards()` 新增 `total_data` 字段，从 `standard_scenario_<id>.json` 读取
+- Step 6 运行表单中，选择目标标准后显示：「共 Z 次场景待运行（X 条路线）」
+
+### 修改文件
+
+| 文件 | 修改内容 |
+|---|---|
+| `gui_console/backend/repository.py` | `standard_cards()` 新增 `total_data` 字段 |
+| `gui_console/backend/schemas.py` | `StandardCardResponse` 新增 `total_data: int` |
+| `gui_console/frontend/src/types.ts` | `StandardCard` 新增 `total_data` |
+| `gui_console/frontend/src/App.tsx` | Step 6 场景下拉框下方显示计划数量；导航和按钮入口清除旧实验状态 |
+| `gui_console/frontend/src/styles.css` | 新增 `.run-count-hint` 样式 |

@@ -84,6 +84,7 @@ export interface StandardCard {
   export_status: string;
   export_stale: boolean;
   export_route_count: number;
+  total_data: number;
   overall_status: string;
   latest_updated_at?: string | null;
   paths: Record<string, { path: string; exists: boolean; is_symlink?: boolean; link_target?: string | null }>;

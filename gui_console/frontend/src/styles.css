@@ -1593,6 +1593,14 @@ pre {
   50% { opacity: 0.3; }
 }
 
+/* Step 6 run count hint */
+.run-count-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.85em;
+  color: #19635d;
+}
+
 /* Step 6 run form collapsed summary */
 .run-form-summary {
   display: flex;

@@ -684,6 +684,7 @@ def standard_cards(map_name: str, scenario_ids: Optional[List[int]] = None) -> L
         export_stale = bool(export_ready and source_mtime and export_mtime and source_mtime > export_mtime)
 
         export_route_count = _count_files(export_route_dir, lambda name: name.endswith(".xml"))
+        total_data = _count_total_data(map_name, scenario_id, None) if export_ready else 0
 
         export_status = "Export Ready" if export_ready else "Export Missing"
         if export_stale:
@@ -713,6 +714,7 @@ def standard_cards(map_name: str, scenario_ids: Optional[List[int]] = None) -> L
                 "export_status": export_status,
                 "export_stale": export_stale,
                 "export_route_count": export_route_count,
+                "total_data": total_data,
                 "overall_status": overall_status,
                 "latest_updated_at": _latest_mtime(
                     [route_dir, scenario_dir, export_route_dir, export_scenario_json, export_index_json]

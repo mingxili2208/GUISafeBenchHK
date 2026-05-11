@@ -119,6 +119,7 @@ class StandardCardResponse(BaseModel):
     export_status: str
     export_stale: bool = False
     export_route_count: int = 0
+    total_data: int = 0
     overall_status: str
     latest_updated_at: Optional[str] = None
     paths: Dict[str, Dict[str, Any]]

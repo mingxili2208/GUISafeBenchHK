@@ -1043,7 +1043,15 @@ function App() {
                   (index > 0 && !environmentConfirmed) ||
                   (index === 3 && selectedStandards.length === 0)
                 }
-                onClick={() => setSelectedStep(index)}
+                onClick={() => {
+                  if (index === 4 && selectedStep !== 4) {
+                    setExperimentDetail(null);
+                    setExperimentJobLog([]);
+                    setSelectedExperimentId(null);
+                    setRunFormCollapsed(false);
+                  }
+                  setSelectedStep(index);
+                }}
               >
                 {title}
               </button>
@@ -1573,7 +1581,13 @@ function App() {
                 <p className="muted">
                   全部 {selectedCards.length} 个标准均已达到 Run Ready，可以进入 Step 6 开始评测。
                 </p>
-                <button onClick={() => setSelectedStep(4)}>前往 Step 6 · 运行中心 →</button>
+                <button onClick={() => {
+                  setExperimentDetail(null);
+                  setExperimentJobLog([]);
+                  setSelectedExperimentId(null);
+                  setRunFormCollapsed(false);
+                  setSelectedStep(4);
+                }}>前往 Step 6 · 运行中心 →</button>
               </div>
             )}
           </section>
@@ -1660,6 +1674,12 @@ function App() {
                         </option>
                       ))}
                     </select>
+                    {runScenarioId !== "" && (() => {
+                      const card = selectedReadyCards.find((c) => c.scenario_id === runScenarioId);
+                      return card && card.total_data > 0
+                        ? <span className="run-count-hint">共 {card.total_data} 次场景待运行（{card.export_route_count} 条路线）</span>
+                        : null;
+                    })()}
                   </label>
                   <label>
                     实验名
