@@ -93,6 +93,9 @@ def build_scenarios(waypoints, side_marks):
         }
         scenario_waypoints.append(point)
 
+    if not scenario_waypoints:
+        raise ValueError("build_scenarios received 0 waypoints — scenario file may be empty or corrupt")
+
     # 使用第一个路径点作为场景的触发点，其他路径点作为其他actor的生成点
     config = {}
     # group other actors by side_marks ('left' or 'right')

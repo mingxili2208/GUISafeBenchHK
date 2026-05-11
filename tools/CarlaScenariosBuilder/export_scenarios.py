@@ -103,10 +103,20 @@ def main(config):
         all_scenario_configs = []
         for scenario_file_name in scenario_file_names:
             scenario_file = os.path.join(source_dir, scenario_file_name)
-            selected_waypoints = np.load(scenario_file)
-            scenario_actor_sides_file = scenario_file.replace(".npy", "_sides.npy")
-            side_marks = np.load(scenario_actor_sides_file)
-            all_scenario_configs += create_scenario_hongkong(selected_waypoints, side_marks)
+            try:
+                selected_waypoints = np.load(scenario_file)
+                if selected_waypoints.size == 0:
+                    print(f"[warning] skipping empty scenario file: {scenario_file}")
+                    continue
+                scenario_actor_sides_file = scenario_file.replace(".npy", "_sides.npy")
+                if not os.path.isfile(scenario_actor_sides_file):
+                    print(f"[warning] skipping scenario without sides file: {scenario_file}")
+                    continue
+                side_marks = np.load(scenario_actor_sides_file)
+                all_scenario_configs += create_scenario_hongkong(selected_waypoints, side_marks)
+            except Exception as exc:
+                print(f"[error] failed to export {scenario_file}: {exc}")
+                continue
 
         save_scenarios(config, scenario_id, all_scenario_configs)
         print(f"{len(all_scenario_configs)} scenarios of scenario {scenario_id} exported from {source_dir}")

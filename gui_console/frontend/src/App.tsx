@@ -932,7 +932,10 @@ function App() {
     if (!runtimeAlert?.jobId) {
       return;
     }
-    setTaskConsoleView("current");
+    const alertJob = jobs.find((j) => j.id === runtimeAlert.jobId);
+    const isRunning = alertJob?.status === "running" || alertJob?.status === "starting";
+    setTaskConsoleView(isRunning ? "current" : "history");
+    setRightPanel("console");
     setActiveJobId(runtimeAlert.jobId);
     setRuntimeAlert(null);
   }

@@ -120,3 +120,30 @@
 | `gui_console/frontend/src/types.ts` | `StandardCard` 新增 `total_data` |
 | `gui_console/frontend/src/App.tsx` | Step 6 场景下拉框下方显示计划数量；导航和按钮入口清除旧实验状态 |
 | `gui_console/frontend/src/styles.css` | 新增 `.run-count-hint` 样式 |
+
+---
+
+## 2026-05-11 fix: 任务监控点击失败历史不跳转 + export 空文件 IndexError
+
+### 问题描述
+
+1. 点击运行时告警弹窗中的「查看任务日志」按钮后，总是切换到「当前」视图，但失败任务在「历史」视图中，导致看不到日志。
+2. `export` 导出时报 `IndexError`，原因是场景 `.npy` 文件为空或缺少 `_sides.npy` 文件，导致 `build_scenarios()` 访问空列表的 `[0]` 索引。
+
+### 修复内容
+
+**任务监控跳转修复**：
+- `handleOpenAlertJob()` 根据目标任务的运行状态选择正确的视图模式：运行中 → "current"，其他 → "history"
+- 同时强制切换右侧面板到 "console" 视图
+
+**export 容错处理**：
+- `export_scenarios.py`：跳过空的场景文件、缺少 sides 文件的场景，打印 warning 继续导出其他文件
+- `utilities.py` → `build_scenarios()`：增加空 waypoints 检查，抛出有意义的 ValueError 而非 IndexError
+
+### 修改文件
+
+| 文件 | 修改内容 |
+|---|---|
+| `gui_console/frontend/src/App.tsx` | `handleOpenAlertJob()` 根据 job 状态选择 view mode，强制 `rightPanel="console"` |
+| `tools/CarlaScenariosBuilder/export_scenarios.py` | 添加 try/except 跳过有问题的场景文件，检查空文件和缺失的 sides 文件 |
+| `tools/CarlaScenariosBuilder/utilities.py` | `build_scenarios()` 增加空 waypoints 检查 |
