@@ -39,3 +39,34 @@
 4. Step 6 顶部显示黄色警告：「请返回 Step 5 重新导出后再运行」
 5. 用户返回 Step 5 重新导出 → `scenario_data/` mtime 更新 → 状态恢复 "Run Ready"
 6. Step 6 允许使用最新数据运行
+
+---
+
+## 2026-05-11 feat: StandardCard 添加「查看文件」按钮
+
+### 功能说明
+
+在 Step 3-5 的标准工作区卡片中，每个子步骤新增「查看文件」按钮，点击后在系统文件管理器中打开对应的目录，方便用户直接查看和确认路线、场景标注、导出数据。
+
+### 按钮位置
+
+| 子步骤 | 打开的目录 | 显示条件 |
+|---|---|---|
+| Step 3 · 路线绘制 | `scenario_origin/<map>/scenario_<id>_routes/` | 路线目录存在时 |
+| Step 4 · Trigger/Actor | `scenario_origin/<map>/scenario_<id>_scenarios/` | 场景目录存在时 |
+| Step 5 · 导出路线 | `scenario_data/<map>/scenario_<id>_routes/` | 导出目录存在时 |
+
+### 补充说明
+
+- Step 3/4 的路线编辑器和场景编辑器**不会自动保存**，必须右键点击才会保存当前选点为一条 route 或 scenario
+- Step 5 导出**不会生成独立的 session/config 文件**，只生成 XML 路线文件 + JSON 索引 + JSON 场景定义，被 `run.py` 直接消费
+- 后端 `POST /api/open-dir` 接口限制只能打开仓库内的目录
+
+### 修改文件
+
+| 文件 | 修改内容 |
+|---|---|
+| `gui_console/backend/main.py` | 新增 `POST /api/open-dir` 接口，接收路径参数并用 `xdg-open` 打开，限制只能打开仓库内的目录 |
+| `gui_console/backend/schemas.py` | 新增 `OpenDirRequest` schema |
+| `gui_console/frontend/src/components/StandardCard.tsx` | 每个 substep 的 button-row 中新增「查看文件」按钮，条件显示 |
+| `gui_console/frontend/src/App.tsx` | 新增 `handleOpenDir()` 并传入 StandardCard |

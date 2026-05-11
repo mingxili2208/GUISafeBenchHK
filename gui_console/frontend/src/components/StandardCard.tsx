@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { apiPost } from "../api";
 import { StandardCard as StandardCardType } from "../types";
 
 export type CardSubStep = "route" | "scenario" | "export";
@@ -67,6 +68,7 @@ interface StandardCardProps {
   onExport: (scenarioId: number, format: "standard" | "adv" | "both") => void;
   onClearRoute: (scenarioId: number) => void;
   onClearScenario: (scenarioId: number) => void;
+  onOpenDir: (path: string) => void;
 }
 
 function StepDot({ done, active }: { done: boolean; active: boolean }) {
@@ -74,7 +76,7 @@ function StepDot({ done, active }: { done: boolean; active: boolean }) {
   return <span className={cls} />;
 }
 
-export function StandardCard({ card, subStep, onRoute, onScenario, onExport, onClearRoute, onClearScenario }: StandardCardProps) {
+export function StandardCard({ card, subStep, onRoute, onScenario, onExport, onClearRoute, onClearScenario, onOpenDir }: StandardCardProps) {
   const routeDone = card.route_count > 0;
   const scenarioDone = card.scenario_count > 0 && card.sides_count > 0;
   const exportDone = card.export_status === "Export Ready";
@@ -131,6 +133,9 @@ export function StandardCard({ card, subStep, onRoute, onScenario, onExport, onC
         )}
         <div className="button-row">
           <button onClick={() => onRoute(card.scenario_id)}>启动路线编辑器</button>
+          {card.paths.route_dir?.exists && (
+            <button className="button-secondary" onClick={() => onOpenDir(card.paths.route_dir!.path)}>查看文件</button>
+          )}
           {routeDone && (
             <button
               className="btn-danger-ghost"
@@ -168,6 +173,9 @@ export function StandardCard({ card, subStep, onRoute, onScenario, onExport, onC
           <button onClick={() => onScenario(card.scenario_id)} disabled={!routeDone}>
             启动场景编辑器
           </button>
+          {card.paths.scenario_dir?.exists && (
+            <button className="button-secondary" onClick={() => onOpenDir(card.paths.scenario_dir!.path)}>查看文件</button>
+          )}
           {scenarioDone && (
             <button
               className="btn-danger-ghost"
@@ -200,6 +208,9 @@ export function StandardCard({ card, subStep, onRoute, onScenario, onExport, onC
           <button onClick={() => onExport(card.scenario_id, "standard")} disabled={!scenarioDone}>导出 Standard</button>
           <button onClick={() => onExport(card.scenario_id, "adv")} disabled={!scenarioDone}>导出 Adv</button>
           <button onClick={() => onExport(card.scenario_id, "both")} disabled={!scenarioDone}>导出 Both</button>
+          {card.paths.export_route_dir?.exists && (
+            <button className="button-secondary" onClick={() => onOpenDir(card.paths.export_route_dir!.path)}>查看文件</button>
+          )}
         </div>
       </section>
 

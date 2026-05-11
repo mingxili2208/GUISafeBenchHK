@@ -760,6 +760,14 @@ function App() {
     }
   }
 
+  async function handleOpenDir(path: string) {
+    try {
+      await apiPost("/api/open-dir", { path });
+    } catch (fetchError) {
+      handleApiError(fetchError);
+    }
+  }
+
   async function handleClearRoute(scenarioId: number) {
     if (!window.confirm(`确认清零 Scenario ${scenarioId.toString().padStart(2, "0")} 的路线数据？\n此操作同时会清除该场景的 Trigger/Actor 数据。`)) return;
     try {
@@ -1555,6 +1563,7 @@ function App() {
                   onExport={handleExport}
                   onClearRoute={handleClearRoute}
                   onClearScenario={handleClearScenario}
+                  onOpenDir={handleOpenDir}
                 />
               ))}
             </div>

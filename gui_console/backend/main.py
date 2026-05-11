@@ -44,6 +44,7 @@ from .schemas import (
     MapCatalogResponse,
     MapPrepareRequest,
     MapStatusResponse,
+    OpenDirRequest,
     OptionsResponse,
     RerunExperimentRequest,
     RunExperimentRequest,
@@ -561,6 +562,18 @@ def open_video_dir(experiment_id: str):
         raise HTTPException(status_code=404, detail=f"视频目录不存在：{video_dir}")
     subprocess.Popen(["xdg-open", str(video_dir)])
     return {"ok": True, "video_dir": str(video_dir)}
+
+
+@app.post("/api/open-dir")
+def open_dir(request: OpenDirRequest):
+    target = Path(request.path).resolve()
+    repo_root = settings.REPO_ROOT.resolve()
+    if not str(target).startswith(str(repo_root)):
+        raise HTTPException(status_code=400, detail="只允许打开仓库内的目录。")
+    if not target.exists():
+        target.mkdir(parents=True, exist_ok=True)
+    subprocess.Popen(["xdg-open", str(target)])
+    return {"ok": True, "dir": str(target)}
 
 
 @app.post("/api/experiments/{experiment_id}/resume", response_model=JobInfo)

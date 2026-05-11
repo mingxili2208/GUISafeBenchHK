@@ -54,6 +54,10 @@ class RerunExperimentRequest(BaseModel):
     exp_name: Optional[str] = None
 
 
+class OpenDirRequest(BaseModel):
+    path: str
+
+
 class EnvironmentCheckResponse(BaseModel):
     ok: bool
     message: str
