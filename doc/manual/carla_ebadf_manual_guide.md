@@ -47,16 +47,17 @@ $CARLA_UE4_ROOT/Unreal/CarlaUE4/Plugins/Carla/Source/Carla/Carla.cpp
 
 `carla::throw_exception` 是 rpclib 内部异常的统一出口。原实现对所有错误都调用 `UE_LOG(Fatal)` 导致进程崩溃；或者尝试 `throw`，但 UE4 以 `-fno-exceptions` 编译，`throw` 在此环境下会触发 `__cxxabiv1::failed_throw → std::abort() → SIGABRT`。
 
-修复策略：识别 EBADF（"Bad file descriptor"）这类 double-close 竞态，改用 `pthread_exit(nullptr)` 只退出当前 ASIO worker 线程，其他线程和进程继续运行。
+修复策略：识别 EBADF（"Bad file descriptor"）这类 double-close 竞态，**不再使用 `pthread_exit`，改用 `std::terminate()` 干净终止**。
+
+> ⚠️ **第三轮修正（2026-05-11）**：`pthread_exit(nullptr)` 只杀当前 ASIO worker 线程，不调用 C++ 析构器，导致 epoll reactor 的 `descriptor_state` 对象残留在内存中成为野指针。当新连接通过 `start_accept()` 触发 `deregister_descriptor(descriptor_state*&)` 时，解引用无效指针 → 访问 `0x0000000000000090` → **SIGSEGV**。
+>
+> 正确做法：`close_socket_once()`（修复二）从源头消除双 close。如果 EBADF 仍到达 `throw_exception`，说明原子 close 未生效，此时用 `std::terminate()` 干净终止（SIGABRT），而不是留下腐烂的 epoll 状态。
 
 ### 操作步骤
 
 1. 打开文件 `$CARLA_UE4_ROOT/Unreal/CarlaUE4/Plugins/Carla/Source/Carla/Carla.cpp`
 
-2. 在文件顶部的 `#include` 区域添加：
-   ```cpp
-   #include <pthread.h>
-   ```
+2. **移除** `#include <pthread.h>`（如果存在）
 
 3. 找到 `throw_exception` 函数（搜索 `void throw_exception`），将整个函数替换为：
    ```cpp
@@ -65,12 +66,15 @@ $CARLA_UE4_ROOT/Unreal/CarlaUE4/Plugins/Carla/Source/Carla/Carla.cpp
        const char* msg = e.what();
 
        if (msg && std::strstr(msg, "close: Bad file descriptor") != nullptr) {
-         UE_LOG(LogCarla, Warning,
-           TEXT("rpclib double-close race (EBADF) — exiting ASIO worker thread cleanly: %s"),
+         UE_LOG(LogCarla, Error,
+           TEXT("FATAL: rpclib double-close (EBADF) detected — "
+                "close_socket_once() should have prevented this. "
+                "Terminating cleanly: %s"),
            UTF8_TO_TCHAR(msg));
-         // pthread_exit 只退出当前 ASIO worker 线程，不影响整个进程。
-         // 此处不能用 throw：UE4 -fno-exceptions 下 throw 会触发 abort() → SIGABRT。
-         pthread_exit(nullptr);
+         // std::terminate() → SIGABRT：干净终止。
+         // 切勿使用 pthread_exit()：它会破坏 epoll 状态，
+         // 导致后续 deregister_descriptor 访问 0x90 → SIGSEGV。
+         std::terminate();
        }
 
        UE_LOG(LogCarla, Fatal, TEXT("Exception thrown: %s"), UTF8_TO_TCHAR(msg));
@@ -329,6 +333,6 @@ python scripts/run.py --mode eval --agent behavior --scenario standard --seed 0
 | 层次 | 文件 | 机制 | 效果 |
 |------|------|------|------|
 | 治本 | `async_writer.h` + `server_session.cc` | `close_socket_once()` 原子旗标 | 三条并发 close 路径只有一条执行，**消除双 close** |
-| 治标 | `Carla.cpp` | `pthread_exit` 替代 Fatal log | EBADF 若仍到达 → 只退出 worker 线程，进程存活 |
+| 治标 | `Carla.cpp` | `std::terminate()` 替代 `pthread_exit` | EBADF 若仍到达 → 干净 SIGABRT，不破坏 epoll 状态 |
 | 防御 A | `carla_env_tcp.py` | 传感器顺序初始化 | 减少 rpc session 并发初始化窗口 |
 | 防御 B | `carla_runner.py` | Episode 间隔 5s | 给 CARLA 完整清理时间 |

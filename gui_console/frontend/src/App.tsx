@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { apiGet, apiPost, apiDelete } from "./api";
 import { ExperimentList, Step7Tab } from "./components/ExperimentList";
@@ -121,10 +122,14 @@ function App() {
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
   const [experimentDetail, setExperimentDetail] = useState<ExperimentDetail | null>(null);
   const [selectedStep, setSelectedStep] = useState<number>(0);
+  const [stepSwitching, setStepSwitching] = useState(false);
+  const [stepSwitchTargetStep, setStepSwitchTargetStep] = useState<number | null>(null);
+  const [environmentCheckRunning, setEnvironmentCheckRunning] = useState(false);
   const [selectedMap, setSelectedMap] = useState<string>("");
   const [selectedStandards, setSelectedStandards] = useState<number[]>([]);
   const [cardSubStep, setCardSubStep] = useState<CardSubStep>("route");
   const [step7Tab, setStep7Tab] = useState<Step7Tab>("list");
+  const [showBuiltStandardsPanel, setShowBuiltStandardsPanel] = useState(false);
   const [runFormCollapsed, setRunFormCollapsed] = useState(false);
   const [cards, setCards] = useState<StandardCardType[]>([]);
   const [mapCatalog, setMapCatalog] = useState<MapCatalogResponse | null>(null);
@@ -141,6 +146,7 @@ function App() {
     jobId?: string | null;
     experimentId?: string | null;
   } | null>(null);
+  const stepSwitchTimerRef = useRef<number | null>(null);
 
   const [envForm, setEnvForm] = useState({
     repo_root: "",
@@ -274,9 +280,6 @@ function App() {
     .sort((left, right) => left.scenario_id - right.scenario_id);
   const mapExperiments = experiments.filter((item) => item.manifest.map === selectedMap);
   const unfinishedMapExperiments = mapExperiments.filter((item) => item.remaining_count > 0);
-  const completedMapExperiments = mapExperiments.filter(
-    (item) => item.total_data > 0 && item.remaining_count === 0
-  );
   const mapPathEntries = mapStatus ? Object.entries(mapStatus.paths) : [];
   const readyMapPathCount = mapPathEntries.filter(([, value]) => value.exists).length;
   const hasExistingMapState =
@@ -419,6 +422,12 @@ function App() {
     }
   }
 
+  function selectConsoleJob(jobId: string) {
+    setActiveJobLog([]);
+    setActiveJobId(jobId);
+    setRightPanel("console");
+  }
+
   async function loadExperimentJobLog(jobId: string) {
     try {
       setExperimentJobLog(await fetchJobLog(jobId, 220));
@@ -502,6 +511,7 @@ function App() {
     if (!selectedMap) {
       return;
     }
+    setShowBuiltStandardsPanel(false);
     const refresh = () => {
       void loadMapStatus(selectedMap);
       void loadCards(selectedMap);
@@ -549,6 +559,7 @@ function App() {
       setActiveJobLog([]);
       return;
     }
+    setActiveJobLog([]);
     void loadActiveJobLog(activeJobId);
     const timer = window.setInterval(() => {
       void loadActiveJobLog(activeJobId);
@@ -632,8 +643,69 @@ function App() {
     setError((fetchError as Error).message);
   }
 
+  function clearStepSwitchTimer() {
+    if (stepSwitchTimerRef.current !== null) {
+      window.clearTimeout(stepSwitchTimerRef.current);
+      stepSwitchTimerRef.current = null;
+    }
+  }
+
+  function hideStepSwitchIndicator() {
+    clearStepSwitchTimer();
+    setStepSwitching(false);
+    setStepSwitchTargetStep(null);
+  }
+
+  function showStepSwitchIndicator(targetStep: number, autoHideMs: number | null = 620, forceCommit = false) {
+    clearStepSwitchTimer();
+    const commit = () => {
+      setStepSwitchTargetStep(targetStep);
+      setStepSwitching(true);
+    };
+    if (forceCommit) {
+      flushSync(commit);
+    } else {
+      commit();
+    }
+    if (autoHideMs !== null) {
+      stepSwitchTimerRef.current = window.setTimeout(() => {
+        setStepSwitching(false);
+        setStepSwitchTargetStep(null);
+        stepSwitchTimerRef.current = null;
+      }, autoHideMs);
+    }
+  }
+
+  function waitForNextPaint() {
+    return new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => resolve());
+      });
+    });
+  }
+
+  async function previewStepSwitch(step: number) {
+    if (step === selectedStep) {
+      return;
+    }
+    showStepSwitchIndicator(step, null, true);
+    await waitForNextPaint();
+  }
+
+  function navigateStep(step: number) {
+    if (step === selectedStep) {
+      return;
+    }
+    showStepSwitchIndicator(step);
+    setSelectedStep(step);
+  }
+
   async function handleEnvironmentCheck() {
-    setError(null);
+    flushSync(() => {
+      setError(null);
+      setEnvironmentCheckRunning(true);
+    });
+    await previewStepSwitch(1);
     try {
       const response = await apiPost<{ ok: boolean; message: string; failed_checks: string[] }>(
         "/api/environment/check",
@@ -647,17 +719,21 @@ function App() {
         await loadMapStatus(selectedMap);
       }
       if (response.ok) {
-        setSelectedStep(1);
+        navigateStep(1);
       } else {
-        setSelectedStep(0);
+        hideStepSwitchIndicator();
       }
     } catch (fetchError) {
+      hideStepSwitchIndicator();
       handleApiError(fetchError);
+    } finally {
+      setEnvironmentCheckRunning(false);
     }
   }
 
   async function handleDisconnectCarla() {
     setError(null);
+    await previewStepSwitch(0);
     try {
       const response = await apiPost<{
         ok: boolean;
@@ -668,8 +744,9 @@ function App() {
       setOptions((current) => (current ? { ...current, state: response.state } : current));
       setEnvironmentChecked(true);
       setNotice(response.message);
-      setSelectedStep(0);
+      navigateStep(0);
     } catch (fetchError) {
+      hideStepSwitchIndicator();
       handleApiError(fetchError);
     }
   }
@@ -694,6 +771,16 @@ function App() {
       setError("请先选择地图。");
       return;
     }
+    if (!carlaServiceOnline) {
+      setError(`CARLA 服务当前不可达，无法重新生成 waypoint。请先在 Step 0 连接 ${envForm.carla_host}:${envForm.carla_port}。`);
+      setNotice("Waypoint 生成需要读取 CARLA 当前地图；CARLA 在线后再重试。");
+      navigateStep(0);
+      return;
+    }
+    setError(null);
+    setNotice(`正在启动 ${selectedMap} 的 waypoint 生成任务...`);
+    setTaskConsoleView("current");
+    setRightPanel("console");
     try {
       const job = await apiPost<JobInfo>("/api/jobs/map-prepare", {
         map_name: selectedMap,
@@ -701,8 +788,7 @@ function App() {
         port: envForm.carla_port
       });
       setNotice(`已启动 waypoint 生成任务：${job.id}`);
-      setTaskConsoleView("current");
-      setActiveJobId(job.id);
+      selectConsoleJob(job.id);
       waypointJobIdRef.current = job.id;
       await loadJobs();
       await loadMapStatus(selectedMap);
@@ -828,7 +914,7 @@ function App() {
       if (newExpId) {
         setSelectedExperimentId(newExpId);
       }
-      setSelectedStep(4);
+      navigateStep(4);
       await loadJobs();
       await loadExperiments();
     } catch (fetchError) {
@@ -841,7 +927,7 @@ function App() {
       setSelectedExperimentId(experimentId);
       setExperimentDetail(null);
       setRunFormCollapsed(true);
-      setSelectedStep(4);
+      navigateStep(4);
       const job = await apiPost<JobInfo>(`/api/experiments/${experimentId}/resume`, {});
       setNotice(`已发起续跑任务：${job.id}`);
       setTaskConsoleView("current");
@@ -859,7 +945,7 @@ function App() {
       setSelectedExperimentId(experimentId);
       setExperimentDetail(null);
       setRunFormCollapsed(true);
-      setSelectedStep(4);
+      navigateStep(4);
       const job = await apiPost<JobInfo>(`/api/experiments/${experimentId}/rerun`, {
         render: true,
         save_video: true
@@ -922,14 +1008,14 @@ function App() {
 
   function handleContinueStandard(scenarioId: number) {
     setSelectedStandards([scenarioId]);
-    setSelectedStep(3);
+    navigateStep(3);
   }
 
   function handleOpenExperiment(experimentId: string) {
     setSelectedExperimentId(experimentId);
     setExperimentDetail(null);
     setStep7Tab("detail");
-    setSelectedStep(5);
+    navigateStep(5);
   }
 
   function handleOpenAlertJob() {
@@ -939,8 +1025,7 @@ function App() {
     const alertJob = jobs.find((j) => j.id === runtimeAlert.jobId);
     const isRunning = alertJob?.status === "running" || alertJob?.status === "starting";
     setTaskConsoleView(isRunning ? "current" : "history");
-    setRightPanel("console");
-    setActiveJobId(runtimeAlert.jobId);
+    selectConsoleJob(runtimeAlert.jobId);
     setRuntimeAlert(null);
   }
 
@@ -950,7 +1035,7 @@ function App() {
     }
     setSelectedExperimentId(runtimeAlert.experimentId);
     setStep7Tab("detail");
-    setSelectedStep(5);
+    navigateStep(5);
     setRuntimeAlert(null);
   }
 
@@ -964,19 +1049,14 @@ function App() {
   }
 
   function handleContinueWithExistingMapData() {
-    setSelectedStep(2);
+    navigateStep(2);
   }
 
-  function handleOpenFirstResumeCandidate() {
-    const target = unfinishedMapExperiments[0] ?? mapExperiments[0] ?? null;
-    if (mapExperiments.length <= 1 && target) {
-      setSelectedExperimentId(target.manifest.experiment_id);
-    } else {
-      setSelectedExperimentId(null);
-      setExperimentDetail(null);
-    }
+  function handleOpenStep7FromMapSummary() {
+    setSelectedExperimentId(null);
+    setExperimentDetail(null);
     setStep7Tab("list");
-    setSelectedStep(5);
+    navigateStep(5);
   }
 
   const runningJobs = jobs.filter((j) => j.status === "running" || j.status === "starting");
@@ -993,7 +1073,7 @@ function App() {
     if (!waypointJobId) return;
     const waypointJob = jobs.find((j) => j.id === waypointJobId);
     if (!waypointJob) return;
-    if (waypointJob.status === "finished") {
+    if (waypointJob.status === "succeeded") {
       waypointJobIdRef.current = null;
       setNotice(`Waypoint 生成任务 ${waypointJobId} 已完成，数据已就绪，可以继续下一步。`);
       if (selectedMap) {
@@ -1032,6 +1112,14 @@ function App() {
     previousStepRef.current = selectedStep;
   }, [latestFailedJob, latestRunningJob, selectedStep]);
 
+  useEffect(() => {
+    return () => {
+      if (stepSwitchTimerRef.current !== null) {
+        window.clearTimeout(stepSwitchTimerRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="app-shell">
       <aside className="step-nav">
@@ -1057,7 +1145,7 @@ function App() {
                     setSelectedExperimentId(null);
                     setRunFormCollapsed(false);
                   }
-                  setSelectedStep(index);
+                  navigateStep(index);
                 }}
               >
                 {title}
@@ -1088,6 +1176,12 @@ function App() {
                     CARLA 服务：{carlaServiceOnline ? "在线" : "离线"}
                   </span>
                 </div>
+                {stepSwitching ? (
+                  <div className="step-switch-indicator" role="status" aria-live="polite">
+                    <span className="step-switch-spinner" aria-hidden="true" />
+                    <span>正在切换到 {STEP_TITLES[stepSwitchTargetStep ?? selectedStep]}</span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="global-toolbar-summary">
@@ -1170,7 +1264,6 @@ function App() {
 
         {selectedStep === 0 ? (
           <section className="panel">
-            <h3>Step 0. 环境确认</h3>
             <div className="environment-setup-shell">
               <div className="environment-form-stack">
                 <div className="form-grid environment-form-grid">
@@ -1231,8 +1324,12 @@ function App() {
 
             </div>
             <div className="environment-check-action">
-              <button className="environment-check-button" onClick={handleEnvironmentCheck}>
-                检查 CARLA 与 Python 环境
+              <button
+                className="environment-check-button"
+                onClick={handleEnvironmentCheck}
+                disabled={environmentCheckRunning}
+              >
+                {environmentCheckRunning ? "正在检查环境..." : "检查 CARLA 与 Python 环境"}
               </button>
               {options?.state.carla_reachable ? (
                 <button
@@ -1279,16 +1376,15 @@ function App() {
 
         {selectedStep === 1 ? (
           <section className="panel">
-            <h3>Step 1. 选择地图并生成 waypoint</h3>
             <div className="step1-map-layout">
               <section className="step1-map-panel step1-map-picker">
                 <div className="section-heading">
                   <h4>地图选择</h4>
-                  <span className="muted">地图列表每 20 秒自动刷新，或点击刷新按钮手动更新</span>
+                  <span className="muted">优先使用当前 world，可切换 CARLA 安装目录中的地图</span>
                 </div>
-                <label>
-                  地图
+                <div className="step1-map-control-row">
                   <select
+                    aria-label="地图选择"
                     value={selectedMap}
                     onChange={(event) => setSelectedMap(event.target.value)}
                   >
@@ -1298,37 +1394,19 @@ function App() {
                       </option>
                     ))}
                   </select>
-                </label>
-                <div className="step1-map-selection-summary">
-                  <article className="step1-map-highlight">
-                    <span>当前选择</span>
-                    <strong>{selectedMap || "未选择地图"}</strong>
-                    <p className="muted">将作为 read waypoints 的目标地图</p>
-                  </article>
-  
+                  {mapCatalog ? (
+                    <div className="step1-map-source-grid">
+                      <article className="step1-map-source-item">
+                        <span>当前 world</span>
+                        <strong>{mapCatalog.current_world_map ?? "未读取"}</strong>
+                      </article>
+                      <article className="step1-map-source-item">
+                        <span>CARLA 根目录</span>
+                        <strong>{mapCatalog.carla_root ?? "未检测到"}</strong>
+                      </article>
+                    </div>
+                  ) : null}
                 </div>
-              </section>
-
-              <aside className="step1-map-panel step1-map-help">
-                <div className="section-heading">
-                  <h4>地图来源与状态</h4>
-                  <span className="muted">用于确认当前读取目标</span>
-                </div>
-                <p className="muted">
-                  默认会优先选中当前已经加载到 CARLA 的地图；你也可以从 CARLA 安装目录扫描到的主地图中切换 waypoint 生成目标。
-                </p>
-                {mapCatalog ? (
-                  <div className="step1-map-source-grid">
-                    <article className="step1-map-source-item">
-                      <span>当前 world</span>
-                      <strong>{mapCatalog.current_world_map ?? "未读取"}</strong>
-                    </article>
-                    <article className="step1-map-source-item">
-                      <span>CARLA 根目录</span>
-                      <strong>{mapCatalog.carla_root ?? "未检测到"}</strong>
-                    </article>
-                  </div>
-                ) : null}
                 {mapCatalog?.current_world_error ? (
                   <details className="data-viewer compact-data-viewer">
                     <summary>查看读取异常</summary>
@@ -1337,7 +1415,7 @@ function App() {
                     ) : null}
                   </details>
                 ) : null}
-              </aside>
+              </section>
             </div>
 
             {mapStatus ? (
@@ -1349,17 +1427,11 @@ function App() {
                         <p className="eyebrow">已有数据 / 断点</p>
                         <h4>检测到这张地图已有数据</h4>
                         <p className="muted">
-                          当前已就绪 {readyMapPathCount} 个基础目录，已有标准 {existingMapCards.length} 个，相关实验{" "}
-                          {mapExperiments.length} 个。
+                          当前已就绪 {readyMapPathCount} 个基础目录，已有标准 {existingMapCards.length} 个。
                         </p>
                       </div>
                       <div className="button-row compact-row">
                         <button onClick={handleContinueWithExistingMapData}>继续使用已有数据</button>
-                        {mapExperiments.length > 0 ? (
-                          <button className="button-secondary" onClick={handleOpenFirstResumeCandidate}>
-                            查看断点 / 续跑
-                          </button>
-                        ) : null}
                         <button className="button-secondary" onClick={handleGenerateWaypoint}>
                           重新生成 waypoint
                         </button>
@@ -1395,7 +1467,7 @@ function App() {
                     <section className="step1-existing-subsection">
                       <div className="section-heading">
                         <h5>当前可复用内容</h5>
-                        <span className="muted">先看标准构建，再看实验断点</span>
+                        <span className="muted">先确认 waypoint 与标准构建状态</span>
                       </div>
                       <div className="metrics-grid step1-summary-grid">
                         <article className="metric-card">
@@ -1403,38 +1475,35 @@ function App() {
                           <strong>{mapStatus.paths.waypoints?.exists ? "已存在" : "未生成"}</strong>
                           <p className="muted">用于后续 route / scenario 构建</p>
                         </article>
-                        <article className="metric-card">
-                          <span>已构建标准</span>
-                          <strong>{existingMapCards.length}/8</strong>
-                          <p className="muted">
-                            Run Ready {cards.filter((card) => card.overall_status === "Run Ready").length} 个
-                          </p>
-                        </article>
-                        <article className="metric-card">
-                          <span>未完成实验</span>
-                          <strong>{unfinishedMapExperiments.length}</strong>
-                          <p className="muted">可直接断点续跑</p>
-                        </article>
-                        <article className="metric-card">
-                          <span>已完成实验</span>
-                          <strong>{completedMapExperiments.length}</strong>
-                          <p className="muted">可直接查看结果</p>
+                        <article className="metric-card built-standard-card">
+                          <div>
+                            <span>已构建标准</span>
+                            <strong>{existingMapCards.length}/8</strong>
+                            <p className="muted">
+                              Run Ready {cards.filter((card) => card.overall_status === "Run Ready").length} 个
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className="built-standard-toggle"
+                            aria-expanded={showBuiltStandardsPanel}
+                            aria-controls="built-standard-panel"
+                            disabled={existingMapCards.length === 0}
+                            onClick={() => setShowBuiltStandardsPanel((current) => !current)}
+                          >
+                            {showBuiltStandardsPanel ? "收起" : "展开"}
+                          </button>
                         </article>
                       </div>
-                    </section>
-
-                    <div className="map-existing-layout step1-existing-groups">
-                      <section className="map-existing-block">
-                        <div className="section-heading">
-                          <h5>已有标准数据</h5>
-                          <span className="muted">如果已经有 route / scenario / export，可直接继续</span>
-                        </div>
-                        {existingMapCards.length === 0 ? (
-                          <p className="muted">这张地图当前还没有已保存的标准构建数据。</p>
-                        ) : (
-                          <div className="resume-list">
+                      {showBuiltStandardsPanel ? (
+                        <div className="built-standard-panel" id="built-standard-panel">
+                          <div className="built-standard-panel-header">
+                            <h5>已构建标准</h5>
+                            <span className="muted">横向滚动查看，点击继续构建进入对应标准</span>
+                          </div>
+                          <div className="built-standard-scroll">
                             {existingMapCards.map((card) => (
-                              <article key={card.scenario_id} className="resume-item">
+                              <article key={card.scenario_id} className="built-standard-item">
                                 <div>
                                   <p className="eyebrow">Scenario {card.scenario_id.toString().padStart(2, "0")}</p>
                                   <h5>{card.name}</h5>
@@ -1442,53 +1511,28 @@ function App() {
                                     {card.overall_status} · route {card.route_count} · scenario {card.scenario_count}
                                   </p>
                                 </div>
-                                <div className="button-row compact-row">
-                                  <button onClick={() => handleContinueStandard(card.scenario_id)}>继续构建</button>
-                                </div>
+                                <button onClick={() => handleContinueStandard(card.scenario_id)}>继续构建</button>
                               </article>
                             ))}
                           </div>
-                        )}
-                      </section>
-
-                      <section className="map-existing-block">
-                        <div className="section-heading">
-                          <h5>已有实验与断点续跑</h5>
-                          <span className="muted">优先显示这张地图下尚未完成的实验</span>
                         </div>
-                        {mapExperiments.length === 0 ? (
-                          <p className="muted">这张地图目前还没有通过 GUI 创建的实验记录。</p>
-                        ) : (
-                          <div className="resume-list">
-                            {mapExperiments.map((item) => (
-                              <article key={item.manifest.experiment_id} className="resume-item">
-                                <div>
-                                  <p className="eyebrow">{item.manifest.exp_name}</p>
-                                  <h5>
-                                    S{item.manifest.scenario_id.toString().padStart(2, "0")} ·{" "}
-                                    {item.manifest.agent_policy}
-                                  </h5>
-                                  <p className="muted">
-                                    {item.records_count}/{item.total_data} 已完成
-                                    {item.remaining_count > 0 ? ` · 剩余 ${item.remaining_count}` : " · 已完成"}
-                                  </p>
-                                </div>
-                                <div className="button-row compact-row">
-                                  <button onClick={() => handleOpenExperiment(item.manifest.experiment_id)}>
-                                    查看结果
-                                  </button>
-                                  {item.remaining_count > 0 ? (
-                                    <button onClick={() => handleResumeExperiment(item.manifest.experiment_id)}>
-                                      断点续跑
-                                    </button>
-                                  ) : null}
-                                </div>
-                              </article>
-                            ))}
-                          </div>
-                        )}
+                      ) : null}
+                    </section>
+
+                    {mapExperiments.length > 0 ? (
+                      <section className="step1-existing-subsection">
+                        <div className="step1-step7-handoff">
+                          <span>
+                            这张地图有 {mapExperiments.length} 个实验记录
+                            {unfinishedMapExperiments.length > 0 ? `，其中 ${unfinishedMapExperiments.length} 个可续跑` : ""}
+                            。
+                          </span>
+                          <button className="step1-step7-jump-button" onClick={handleOpenStep7FromMapSummary}>
+                            查看实验与断点
+                          </button>
+                        </div>
                       </section>
-                    </div>
+                    ) : null}
                   </section>
                 ) : (
                   <section className="step1-empty-shell">
@@ -1510,7 +1554,6 @@ function App() {
 
         {selectedStep === 2 ? (
           <section className="panel">
-            <h3>Step 2. 选择测试标准</h3>
             <div className="standards-picker">
               {options?.standards.map((item) => (
                 <label key={item.id} className="checkbox-card">
@@ -1531,7 +1574,7 @@ function App() {
               </p>
               <button
                 disabled={selectedStandards.length === 0}
-                onClick={() => setSelectedStep(3)}
+                onClick={() => navigateStep(3)}
               >
                 下一步 →
               </button>
@@ -1541,7 +1584,6 @@ function App() {
 
         {selectedStep === 3 ? (
           <section className="panel">
-            <h3>Step 3-5. 标准工作区</h3>
             {selectedStandards.length === 0 ? (
               <p className="muted">先回到 Step 2 勾选一个或多个标准功能场景。</p>
             ) : null}
@@ -1593,7 +1635,7 @@ function App() {
                   setExperimentJobLog([]);
                   setSelectedExperimentId(null);
                   setRunFormCollapsed(false);
-                  setSelectedStep(4);
+                  navigateStep(4);
                 }}>前往 Step 6 · 运行中心 →</button>
               </div>
             )}
@@ -1602,7 +1644,6 @@ function App() {
 
         {selectedStep === 4 ? (
           <section className="panel">
-            <h3>Step 6. 运行中心</h3>
             {selectedStaleCards.length > 0 && (
               <div className="notice notice-warning">
                 以下标准导出已过期（源路线/场景数据已更新但未重新导出）：
@@ -1839,7 +1880,6 @@ function App() {
 
         {selectedStep === 5 ? (
           <section className="panel">
-            <h3>Step 7. 实验记录</h3>
             <ExperimentList
               experiments={experiments}
               selectedExperimentId={selectedExperimentId}
@@ -1881,7 +1921,7 @@ function App() {
             activeJobId={activeJobId}
             activeJobLog={activeJobLog}
             viewMode={taskConsoleView}
-            onSelectJob={setActiveJobId}
+            onSelectJob={selectConsoleJob}
             onChangeView={setTaskConsoleView}
             onPauseJob={handlePauseJob}
             onStopJob={handleStopJob}

@@ -151,7 +151,10 @@ export function TaskConsole({
               <button
                 key={job.id}
                 className={`task-item ${activeJob?.id === job.id ? "active" : ""}`}
-                onClick={() => onSelectJob(job.id)}
+                onClick={() => {
+                  onChangeView("history");
+                  onSelectJob(job.id);
+                }}
               >
                 <div className="task-item-head">
                   <span className="task-type">{job.type}</span>
@@ -178,6 +181,8 @@ export function TaskConsole({
             <span className="task-chip">PID {activeJob.pid ?? "N/A"}</span>
             <span className="task-chip">{activeJob.process_name ?? "未命名进程"}</span>
           </div>
+
+          {activeJob.error ? <p className="task-error-summary">{activeJob.error}</p> : null}
 
           {canControlActiveJob ? (
             <div className="task-control-card">

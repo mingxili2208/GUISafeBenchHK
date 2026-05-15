@@ -33,11 +33,7 @@ $CARLA_UE4_ROOT/Unreal/CarlaUE4/Plugins/Carla/Source/Carla/Carla.cpp
 
 **变更说明**：将 `throw_exception` 函数中对 EBADF（"Bad file descriptor"）的处理从 `UE_LOG(Fatal)` 改为 `pthread_exit`，避免整个进程被杀死。
 
-**在文件顶部 include 区域新增一行**（加在其他 `#include` 之后）：
-
-```cpp
-#include <pthread.h>
-```
+**不需要额外添加 `#include`**（`<cstring>` 和 `<exception>` 已存在）。
 
 **找到 `throw_exception` 函数，将其完整替换为以下内容**：
 
@@ -47,12 +43,16 @@ namespace carla {
     const char* msg = e.what();
 
     if (msg && std::strstr(msg, "close: Bad file descriptor") != nullptr) {
-      UE_LOG(LogCarla, Warning,
-        TEXT("rpclib double-close race (EBADF) — exiting ASIO worker thread cleanly: %s"),
+      UE_LOG(LogCarla, Error,
+        TEXT("FATAL: rpclib double-close (EBADF) detected — "
+             "close_socket_once() should have prevented this. "
+             "Terminating cleanly: %s"),
         UTF8_TO_TCHAR(msg));
-      // pthread_exit 只退出当前 ASIO worker 线程，不杀整个进程。
-      // 不能用 throw：UE4 以 -fno-exceptions 编译，throw 会触发 abort() → SIGABRT。
-      pthread_exit(nullptr);
+      // std::terminate() → SIGABRT：干净终止。
+      // 切勿使用 pthread_exit()：它只杀当前线程，不调用 C++ 析构器，
+      // 导致 epoll reactor 的 descriptor_state 成为野指针。
+      // 下个连接在 start_accept()→deregister_descriptor 中解引用 0x90→SIGSEGV。
+      std::terminate();
     }
 
     UE_LOG(LogCarla, Fatal, TEXT("Exception thrown: %s"), UTF8_TO_TCHAR(msg));

@@ -29,6 +29,32 @@ from utilities import get_map_centers, get_nearist_waypoints
 DEFAULT_DIST = 200
 
 
+def discover_route_ids(routes_dir):
+    if not os.path.isdir(routes_dir):
+        raise ValueError(
+            f"Route directory does not exist: {routes_dir}. "
+            "Create routes first before opening the scenario editor."
+        )
+
+    route_files = sorted(
+        f for f in os.listdir(routes_dir)
+        if f.startswith("route_") and f.endswith(".npy")
+    )
+    route_ids = []
+    for route_file in route_files:
+        try:
+            route_ids.append(int(route_file.split("_")[1].split(".")[0]))
+        except (IndexError, ValueError):
+            print(f"Skip malformed route file: {route_file}")
+
+    if not route_ids:
+        raise ValueError(
+            f"No route_XX.npy files found in {routes_dir}. "
+            "Create at least one route before opening the scenario editor."
+        )
+    return route_ids
+
+
 def load_scenario(config, waypoints_sparse, save_dir):
     center = None
     selected_waypoints_idx = []
@@ -137,13 +163,9 @@ def main(config):
     routes_dir = os.path.join("scenario_origin", config.map, f"scenario_{scenario_id:02d}_routes")
 
     if config.route_idx == -1:
-        route_files = sorted(f for f in os.listdir(routes_dir) if f.startswith("route_") and f.endswith(".npy"))
-        route_ids = [int(f.split("_")[1].split(".")[0]) for f in route_files]
+        route_ids = discover_route_ids(routes_dir)
     else:
         route_ids = [config.route_idx]
-
-    if not route_ids:
-        raise ValueError(f"No routes found in {routes_dir}")
 
     current_route_index = 0
     selected_route_waypoints_idx = []
@@ -275,6 +297,11 @@ def main(config):
                         changed = True
 
                 elif event.button == 3:
+                    if current_route_index >= len(route_ids):
+                        status_message = "All routes already processed. Press ESC to exit."
+                        changed = True
+                        continue
+
                     if len(selected_trigger_waypoints_idx) < 1:
                         status_message = "Need at least 1 waypoint to create a scenario."
                         changed = True
@@ -309,7 +336,8 @@ def main(config):
                         selected_waypoints[i] = wp
 
                     scenario_cfg = argparse.Namespace(**vars(config))
-                    scenario_cfg.route_idx = route_ids[current_route_index]
+                    active_route_id = route_ids[current_route_index]
+                    scenario_cfg.route_idx = active_route_id
                     route_id, save_file = save_scenario(
                         scenario_cfg,
                         scenario_save_dir,
@@ -321,6 +349,7 @@ def main(config):
                         current_route_index += 1
                         if current_route_index >= len(route_ids):
                             status_message = f"All routes processed. Last save: {save_file}"
+                            selected_trigger_waypoints_idx.clear()
                         else:
                             load_current_route()
                             viewer.center = np.asarray(initial_center, dtype=float)

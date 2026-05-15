@@ -39,40 +39,48 @@ Program received signal SIGSEGV, Segmentation fault.
 
 ---
 
-## 修复方案（三层）
+## 修复方案（四层）
 
-### 修复 1：治标 — `Carla.cpp`（已完成）
+### 修复 1：Carla.cpp — EBADF 干净终止（第三轮修正 ✅ 最终版）
 
 **文件**：`Unreal/CarlaUE4/Plugins/Carla/Source/Carla/Carla.cpp`
 
-将 `carla::throw_exception()` 对 EBADF 的处理从 `UE_LOG(Fatal)` 改为 C++ re-throw：
-
 ```cpp
-void throw_exception(const std::exception &e) {
+// 不需要 #include <pthread.h>
+
+namespace carla {
+  void throw_exception(const std::exception &e) {
     const char* msg = e.what();
 
     if (msg && std::strstr(msg, "close: Bad file descriptor") != nullptr) {
-        UE_LOG(LogCarla, Warning,
-            TEXT("rpclib double-close race (EBADF) — rethrowing: %s"),
-            UTF8_TO_TCHAR(msg));
-        // C++ throw 满足 [[noreturn]]，栈正常展开（RAII析构器运行），
-        // 不杀死整个进程。
-        throw std::runtime_error(msg);
+      UE_LOG(LogCarla, Error,
+        TEXT("FATAL: rpclib double-close (EBADF) detected — "
+             "close_socket_once() should have prevented this. "
+             "Terminating cleanly: %s"),
+        UTF8_TO_TCHAR(msg));
+      // std::terminate() → SIGABRT：干净终止，不破坏 epoll 状态。
+      // 切勿使用 pthread_exit()：它不调用析构器，epoll 的
+      // descriptor_state 成为野指针 → 下次 deregister_descriptor
+      // 访问 0x90 → SIGSEGV。
+      std::terminate();
     }
 
     UE_LOG(LogCarla, Fatal, TEXT("Exception thrown: %s"), UTF8_TO_TCHAR(msg));
     std::terminate();
+  }
 }
 ```
 
-**为什么是 `throw` 而不是其他**：
+**修复历程**：
 
-| 方案 | 问题 |
-|------|------|
-| `return` | `[[noreturn]]` 调用者编译器生成 `ud2`，会触发 SIGILL |
-| `pthread_exit` | 不调用 C++ 析构器，`scoped_lock` 不释放 → strand 死锁 |
-| `std::terminate` | 同 `UE_LOG(Fatal)`，直接杀进程 |
-| `throw` | ✅ 满足 `[[noreturn]]`，栈展开，RAII 析构器运行，不杀进程 |
+| 版本 | 方案 | 问题 |
+|------|------|------|
+| v0 (原始) | `UE_LOG(Fatal)` | 直接 SIGSEGV 杀进程 |
+| v1 | `throw std::runtime_error` | UE4 `-fno-exceptions` → `failed_throw` → **SIGABRT** |
+| v2 | `pthread_exit(nullptr)` | 杀线程不杀进程，但**破坏 epoll 状态** → 下次 `deregister_descriptor(0x90)` → **SIGSEGV** |
+| **v3 (最终)** | **`std::terminate()`** | ✅ 干净 SIGABRT，前提是修复2/3从源头消除了双close |
+
+**关键认知**：`throw_exception` 是最后防线，不是主防线。真正的防御是修复2的 `close_socket_once()`。如果修复2正确生效，EBADF 永远不会到达此处。
 
 ---
 
@@ -216,7 +224,7 @@ make launch
 
 ---
 
-## 修复效果
+## 修复效果（已过时，见第三轮修复汇总）
 
 | 层次 | 文件 | 效果 |
 |------|------|------|
@@ -301,3 +309,72 @@ bash Util/BuildTools/BuildCarlaUE4.sh --build
 | 防御 | `carla_env_tcp.py` | 顺序传感器初始化 |
 
 > **构建说明**：`make CarlaUE4Editor` 会触发完整的 Setup.sh（下载 boost 等），较慢。推荐直接用 `BuildCarlaUE4.sh --build` 做增量构建。若需触发 Carla 模块重编译，可 `touch Carla.cpp`。
+
+---
+
+## 第三轮修复（2026-05-11）：pthread_exit 后遗症 — epoll 野指针崩溃
+
+### 问题
+
+第二轮修复后，运行约 3 个实验后出现新崩溃：
+
+```
+SIGSEGV: invalid attempt to read memory at address 0x0000000000000090
+
+epoll_reactor::deregister_descriptor(int, descriptor_state*&, bool)
+  → reactive_socket_service_base::close
+    → basic_socket::close
+      → server_session::do_read()
+        → server_session::start()
+          → server::impl::start_accept()
+```
+
+### 根因
+
+第二轮修复用 `pthread_exit(nullptr)` 处理 EBADF，但它**只杀线程，不调用 C++ 析构器**。后果：
+
+1. ASIO worker 线程被杀后，epoll reactor 中的 `descriptor_state` 对象残留（未被析构）
+2. 下一 episode 的 `start_accept()` 建立新连接时，`deregister_descriptor` 操作了已释放的 `descriptor_state*` 野指针
+3. 指针接近 NULL（偏移 0x90）→ **SIGSEGV**
+
+时间线佐证：
+```
+07:27:33  实验N开始
+07:33:11  大量 Audio Buffer Underrun（系统过载）
+08:14:10  SIGSEGV（距上次活动41分钟，io_service 半挂起后崩溃）
+```
+
+### 修复
+
+**文件**：`Carla.cpp` — 将 `pthread_exit(nullptr)` 改回 `std::terminate()`
+
+```cpp
+// 移除 #include <pthread.h>
+
+void throw_exception(const std::exception &e) {
+    const char* msg = e.what();
+
+    if (msg && std::strstr(msg, "close: Bad file descriptor") != nullptr) {
+      UE_LOG(LogCarla, Error,
+        TEXT("FATAL: rpclib double-close (EBADF) — "
+             "close_socket_once() should have prevented this. "
+             "Terminating cleanly: %s"),
+        UTF8_TO_TCHAR(msg));
+      std::terminate();  // 干净 SIGABRT，不破坏 epoll
+    }
+
+    UE_LOG(LogCarla, Fatal, TEXT("Exception thrown: %s"), UTF8_TO_TCHAR(msg));
+    std::terminate();
+}
+```
+
+**为什么可以改回 `std::terminate()`**：第二轮修复中的 `close_socket_once()` 从源头消除了双 close。如果 EBADF 仍到达此处，说明原子 close 未生效——此时干净终止是正确的行为。
+
+### 最终修复层次汇总
+
+| 层次 | 文件 | 机制 | 效果 |
+|------|------|------|------|
+| 治本 | `async_writer.h` + `server_session.cc` | `close_socket_once()` 原子旗标 | 三条并发 close 路径只有一条执行，消除双 close |
+| 治标 | `Carla.cpp` | `std::terminate()` | EBADF 若仍到达 → 干净 SIGABRT，不破坏 epoll |
+| 防御 A | `carla_env_tcp.py` | 传感器顺序初始化 | 减少 rpc session 并发初始化窗口 |
+| 防御 B | `carla_runner.py` | Episode 间隔 5s | 给 CARLA 完整清理时间 |
