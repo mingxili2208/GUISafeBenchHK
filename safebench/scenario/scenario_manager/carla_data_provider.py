@@ -657,6 +657,16 @@ class CarlaDataProvider(object):
             This makes actor spawning easier but reduces the amount of configurability.
             Some parameters are the same for all actors (rolename, autopilot and random location) while others are randomized (color)
         """
+        # MEM debug: log before spawn
+        try:
+            with open('/proc/self/status', 'r') as _f:
+                for _line in _f:
+                    if _line.startswith('VmRSS:'):
+                        _rss = int(_line.split()[1]) // 1024
+                        print(f'[SPAWN-MEM] before-spawn-{amount}: RSS={_rss}MB', flush=True)
+                        break
+        except Exception:
+            pass
 
         # 首先简化定义一些CARLA命令
         SpawnActor = carla.command.SpawnActor
@@ -730,8 +740,12 @@ class CarlaDataProvider(object):
                     CarlaDataProvider._spawn_index += 1
 
             if spawn_point:
-                batch.append(SpawnActor(blueprint, spawn_point).then(
-                    SetAutopilot(FutureActor, autopilot, CarlaDataProvider._traffic_manager_port)))
+                # Spawn WITHOUT SetAutopilot in the batch command.
+                # After ~3 batch cycles the Traffic Manager can become non-responsive,
+                # causing the SetAutopilot(FutureActor,...) command inside
+                # apply_batch_sync to hang indefinitely.  We set autopilot
+                # individually after spawn with a timeout instead.
+                batch.append(SpawnActor(blueprint, spawn_point))
 
         actors = CarlaDataProvider.handle_actor_batch(batch, tick)
         for actor in actors:
@@ -739,6 +753,54 @@ class CarlaDataProvider(object):
                 continue
             CarlaDataProvider._carla_actor_pool[actor.id] = actor
             CarlaDataProvider.register_actor(actor)
+
+        # Set autopilot individually AFTER spawn, with a timeout to avoid
+        # hanging when the Traffic Manager is non-responsive.
+        if autopilot and actors:
+            import signal as _signal
+            tm_port = CarlaDataProvider._traffic_manager_port
+            autopilot_ok = 0
+            autopilot_fail = 0
+
+            class _AutopilotTimeout(Exception):
+                pass
+
+            def _alarm_handler(signum, frame):
+                raise _AutopilotTimeout()
+
+            old_handler = _signal.signal(_signal.SIGALRM, _alarm_handler)
+            for actor in actors:
+                if actor is None or not actor.type_id.startswith('vehicle.'):
+                    continue
+                try:
+                    _signal.alarm(10)  # 10-second per-actor timeout
+                    actor.set_autopilot(True, tm_port)
+                    _signal.alarm(0)
+                    autopilot_ok += 1
+                except _AutopilotTimeout:
+                    _signal.alarm(0)
+                    autopilot_fail += 1
+                    print(f"WARNING: set_autopilot(True) timed out for actor {actor.id}, vehicle will be stationary")
+                except Exception as exc:
+                    _signal.alarm(0)
+                    autopilot_fail += 1
+                    print(f"WARNING: set_autopilot(True) failed for actor {actor.id}: {exc}")
+            _signal.signal(_signal.SIGALRM, old_handler)
+            if autopilot_fail > 0:
+                print(f"WARNING: {autopilot_fail}/{autopilot_ok + autopilot_fail} background vehicles failed autopilot-on (TM may be overloaded)")
+
+        # MEM debug: log after spawn
+        try:
+            with open('/proc/self/status', 'r') as _f:
+                for _line in _f:
+                    if _line.startswith('VmRSS:'):
+                        _rss = int(_line.split()[1]) // 1024
+                        spawned = len([a for a in (actors or []) if a is not None])
+                        print(f'[SPAWN-MEM] after-spawn-{amount} spawned={spawned}: RSS={_rss}MB', flush=True)
+                        break
+        except Exception:
+            pass
+
         return actors
 
     @staticmethod

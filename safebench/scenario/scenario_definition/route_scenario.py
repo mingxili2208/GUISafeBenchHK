@@ -381,6 +381,19 @@ class RouteScenario:
             ts = _time.strftime('%H:%M:%S')
             print(f'[ROUTE-CLEANUP-DBG {ts}] {msg}', flush=True)
 
+        def _mem(tag):
+            """Log memory at cleanup stage."""
+            try:
+                with open('/proc/self/status', 'r') as f:
+                    for line in f:
+                        if line.startswith('VmRSS:'):
+                            rss = int(line.split()[1]) // 1024
+                            _dbg(f'MEM {tag}: RSS={rss}MB')
+                            return
+            except Exception:
+                pass
+
+        _mem('cleanup-start')
         _dbg('--- RouteScenario.clean_up START ---')
 
         # First stop all criterion sensor listeners, then destroy them together.
@@ -397,6 +410,7 @@ class RouteScenario:
         _dbg('R2: world flush after criterion sensor stop')
         self._flush_cleanup_world()
         _dbg('R2: flush OK')
+        _mem('after-R2')
 
         _dbg('R3: terminating criteria')
         for cname, criterion in self.criteria.items():
@@ -411,6 +425,7 @@ class RouteScenario:
         _dbg('R4: world flush after criteria terminate')
         self._flush_cleanup_world()
         _dbg('R4: flush OK')
+        _mem('after-R4')
 
         # each scenario remove its own actors
         _dbg(f'R5: cleaning up {len(self.list_scenarios)} scenario instance(s) (scenario actors)')
@@ -426,6 +441,7 @@ class RouteScenario:
         _dbg('R6: world flush after scenario actors cleanup')
         self._flush_cleanup_world()
         _dbg('R6: flush OK')
+        _mem('after-R6')
 
         _dbg('R7: inspecting world actors for background vehicle cleanup')
         world_actor_ids = set()
@@ -437,6 +453,7 @@ class RouteScenario:
         except Exception as world_error:
             _dbg(f'R7: world.get_actors FAILED: {world_error}')
             self.logger.log(f'>> Failed to inspect world actors during cleanup: {world_error}', 'yellow')
+        _mem('after-R7')
 
         # remove background vehicles
         valid_background_actor_ids = []
@@ -459,38 +476,50 @@ class RouteScenario:
                 'yellow',
             )
 
-        # 关键修复：先关闭 autopilot，让 Traffic Manager 停止控制这些车辆，
-        # 再销毁 actor。否则 TM 会继续向已销毁的 actor 发送 apply_control_to_vehicle，
-        # 导致 RPC 连接状态损坏，下一个场景 spawn 时 server_session::close() 触发
-        # "Bad file descriptor" → SIGSEGV 服务端崩溃。
-        _dbg(f'R8a: disabling autopilot for {len(valid_background_actor_ids)} background vehicles before destroy')
-        tm_port = CarlaDataProvider.get_traffic_manager_port()
+        # Turn off autopilot before destroying background vehicles.
+        # Uses signal-based timeout to avoid hanging when the Traffic Manager
+        # is non-responsive (can happen after ~3 batch cycles).
+        old_handler = _signal.signal(_signal.SIGALRM, _alarm_handler)
         hung_ids = []
+        actor_idx = 0
         for actor_id in valid_background_actor_ids:
+            actor_idx += 1
+            _dbg(f'R8a: [{actor_idx}/{len(valid_background_actor_ids)}] actor_id={actor_id}')
             actor = CarlaDataProvider._carla_actor_pool.get(actor_id)
             if actor is None:
+                _dbg(f'R8a:   actor {actor_id} not in pool, skip')
                 continue
-            # 关键：先检查 actor 是否还存活。R7→R8a 之间 CARLA 可能已经异步
-            # 销毁了某些 actor（如 pedestrian），对已死 actor 调用 set_autopilot
-            # 会导致 RPC 永久挂起，阻塞整个 cleanup 流程。
             try:
                 if not actor.is_alive:
-                    _dbg(f'R8a: skip actor {actor_id} (already destroyed)')
+                    _dbg(f'R8a:   skip actor {actor_id} (already destroyed)')
                     continue
             except Exception as alive_error:
-                _dbg(f'R8a: is_alive check failed for {actor_id}: {alive_error}, skip')
+                _dbg(f'R8a:   is_alive check failed for {actor_id}: {alive_error}, skip')
                 continue
+            _dbg(f'R8a:   calling set_autopilot(False) for {actor_id}...')
+            _mem(f'R8a-actor-{actor_idx}-before')
             try:
+                _signal.alarm(8)
                 actor.set_autopilot(False, tm_port)
-            except Exception as ap_error:
-                _dbg(f'R8a: set_autopilot(False) failed for {actor_id}: {ap_error}')
+                _signal.alarm(0)
+                _dbg(f'R8a:   set_autopilot(False) OK for {actor_id}')
+            except _AutopilotTimeout:
+                _signal.alarm(0)
+                _dbg(f'R8a:   set_autopilot(False) TIMED OUT for {actor_id}, skipping')
                 hung_ids.append(actor_id)
+            except Exception as ap_error:
+                _signal.alarm(0)
+                _dbg(f'R8a:   set_autopilot(False) FAILED for {actor_id}: {ap_error}')
+                hung_ids.append(actor_id)
+            _mem(f'R8a-actor-{actor_idx}-after')
+        _signal.signal(_signal.SIGALRM, old_handler)
         if hung_ids:
             self.logger.log(
                 f'>> {len(hung_ids)} background vehicles failed autopilot-off during cleanup (ids: {hung_ids})',
                 'yellow',
             )
         _dbg('R8a: autopilot disabled for all background vehicles')
+        _mem('after-R8a')
 
         # 给 TM 一点时间处理 autopilot 关闭，再执行 destroy
         _dbg('R8b: world flush to let TM process autopilot-off')
@@ -505,9 +534,11 @@ class RouteScenario:
             except Exception as actor_error:
                 _dbg(f'R8c: FAILED: {actor_error}')
                 self.logger.log(f'>> Background actor cleanup failed: {actor_error}', 'yellow')
+        _mem('after-R8c')
 
         _dbg('R9: world flush after background vehicles cleanup')
         self._flush_cleanup_world()
         _dbg('R9: flush OK')
+        _mem('after-R9')
         self.background_actors = []
         _dbg('--- RouteScenario.clean_up DONE ---')

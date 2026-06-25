@@ -293,3 +293,39 @@ class JobStore:
                     code=return_code
                 )
             self._save_job(payload)
+
+        # 内存守卫触发的退出 → 5 秒后自动续跑
+        if return_code == 99 and payload.get("type") in ("run", "resume-run"):
+            self._schedule_auto_resume(payload)
+
+    def _schedule_auto_resume(self, killed_payload):
+        """内存守卫杀死进程后，等待 5 秒再自动启动续跑任务。"""
+        import time as _time
+        import shlex as _shlex
+        job_id = killed_payload["id"]
+        metadata = killed_payload.get("metadata", {})
+        cmd_str = killed_payload.get("command", "")
+        cwd = killed_payload.get("cwd")
+
+        def _resume():
+            _time.sleep(5)
+            new_metadata = dict(metadata)
+            new_metadata["resume"] = True
+            new_metadata["auto_resume_from"] = job_id
+            try:
+                self.start_job(
+                    job_type="resume-run",
+                    command=_shlex.split(cmd_str) if isinstance(cmd_str, str) else list(cmd_str),
+                    cwd=cwd,
+                    metadata=new_metadata,
+                    output_hints=killed_payload.get("output_hints"),
+                    process_name=(killed_payload.get("process_name") or "SafeBenchHK-run").replace(
+                        "run-", "resume-run-"
+                    ),
+                    supports_control=True,
+                )
+            except Exception as exc:
+                print(f"[auto-resume] Failed to start resume job for {job_id}: {exc}")
+
+        t = threading.Thread(target=_resume, daemon=True, name="auto-resume")
+        t.start()

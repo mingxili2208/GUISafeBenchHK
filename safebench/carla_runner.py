@@ -7,6 +7,8 @@ import json
 import numpy as np
 import carla
 import os
+import signal
+import threading
 import pygame
 from tqdm import tqdm
 import time
@@ -304,6 +306,13 @@ class CarlaRunner:
             json.dump(payload, handle, ensure_ascii=False, indent=2)
 
     def eval(self, data_loader):
+        self._start_memory_watchdog()
+        try:
+            return self._eval_impl(data_loader)
+        finally:
+            self._stop_memory_watchdog()
+
+    def _eval_impl(self, data_loader):
         num_finished_scenario = 0
         data_loader.reset_idx_counter()
 
@@ -312,6 +321,8 @@ class CarlaRunner:
         while len(data_loader) > 0:
             sampled_scenario_configs, num_sampled_scenario = data_loader.sampler()
             num_finished_scenario += num_sampled_scenario
+
+            self._log_memory(f'batch-start [{num_finished_scenario}/{data_loader.num_total_scenario}]')
 
             score_list = {config.data_id: [] for config in sampled_scenario_configs}
             batch_completed = False
@@ -329,9 +340,16 @@ class CarlaRunner:
                 self.env.obs = obs
                 self.env.infos = infos
 
+                self._log_memory('after-env-reset')
+
                 self.agent_policy.set_ego_and_route(self.env.get_ego_vehicles(), infos, static_obs=static_obs)
 
+                step_count = 0
                 while not self.env.all_scenario_done():
+                    step_count += 1
+                    if step_count % 50 == 0:
+                        self._log_memory(f'step-{step_count}')
+
                     ego_actions = self.agent_policy.get_action(obs, infos, deterministic=True)
                     scenario_actions = self.scenario_policy.get_action(obs, infos, deterministic=True)
 
@@ -355,6 +373,7 @@ class CarlaRunner:
 
                 batch_completed = True
             finally:
+                self._log_memory('before-cleanup')
                 try:
                     if batch_completed:
                         self.logger.log('>> All scenarios are completed. Clearning up all actors')
@@ -364,6 +383,7 @@ class CarlaRunner:
                         self.env.clean_up()
                 except Exception as cleanup_error:
                     self.logger.log(f'>> Clean up failed: {cleanup_error}', 'red')
+                self._log_memory('after-cleanup')
 
             # Allow CARLA 5 seconds to fully tear down streaming sockets and
             # release resources from the previous scenario before starting the
@@ -416,8 +436,10 @@ class CarlaRunner:
                 except Exception as video_error:
                     batch_summary['video_error'] = str(video_error)
                     self.logger.log(f'>> Failed to save video: {video_error}', 'red')
+                self._log_memory('after-video-save')
 
             self.logger.save_eval_batch_summary(batch_summary)
+            self._log_memory('batch-end')
 
             control_action = self._read_control_request()
             if control_action in {'pause', 'stop'}:
@@ -532,3 +554,48 @@ class CarlaRunner:
 
         if self.logger:
             self.logger.log('>> CARLA connection released. Exiting.', color='green')
+
+    @staticmethod
+    def _read_memory_rss_mb():
+        """Read RSS (resident set size) in MB from /proc/self/status."""
+        try:
+            with open('/proc/self/status', 'r') as f:
+                for line in f:
+                    if line.startswith('VmRSS:'):
+                        # Format: "VmRSS:    12345 kB"
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            return int(parts[1]) // 1024
+        except Exception:
+            pass
+        return -1
+
+    def _log_memory(self, tag):
+        """Log current memory usage with a tag."""
+        rss_mb = self._read_memory_rss_mb()
+        self.logger.log(f'>> [MEM] {tag}: RSS={rss_mb} MB', 'yellow')
+
+    # 内存守卫：daemon 线程监控 RSS，超标时强制退出。
+    # GUI 后台识别退出码 99 后自动续跑。
+    EXIT_WATCHDOG = 99
+    WATCHDOG_THRESHOLD_MB = 4000  # RSS 超过 4GB 触发
+    WATCHDOG_INTERVAL = 3         # 每 3 秒检查一次
+
+    def _start_memory_watchdog(self):
+        self._watchdog_stop = threading.Event()
+
+        def _watch():
+            while not self._watchdog_stop.wait(self.WATCHDOG_INTERVAL):
+                rss = self._read_memory_rss_mb()
+                if rss > self.WATCHDOG_THRESHOLD_MB:
+                    self.logger.log(
+                        f'>> [WATCHDOG] RSS={rss}MB > {self.WATCHDOG_THRESHOLD_MB}MB, force exiting',
+                        'red',
+                    )
+                    os._exit(self.EXIT_WATCHDOG)
+
+        t = threading.Thread(target=_watch, daemon=True, name='mem-watchdog')
+        t.start()
+
+    def _stop_memory_watchdog(self):
+        self._watchdog_stop.set()
