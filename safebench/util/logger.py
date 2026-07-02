@@ -201,13 +201,26 @@ class Logger:
         if load_existing_results:
             if os.path.exists(self.result_file):
                 self.log(f'>> Loading existing evaluation results from {self.result_file}')
-                self.eval_results = joblib.load(self.result_file)
+                try:
+                    self.eval_results = joblib.load(self.result_file)
+                except Exception as e:
+                    self.log(f'>> Failed to load results.pkl: {e}. Starting fresh.', 'yellow')
+                    self.eval_results = {}
             else:
                 self.eval_results = {}
             if os.path.exists(self.record_file):
                 self.log(f'>> Loading existing evaluation records from {self.record_file}, ')
-                self.eval_records = joblib.load(self.record_file)
-                self._normalize_eval_record_keys()
+                try:
+                    self.eval_records = joblib.load(self.record_file)
+                    self._normalize_eval_record_keys()
+                except Exception as e:
+                    self.log(f'>> Failed to load records.pkl: {e}. Trying to rebuild from batch_results.jsonl...', 'yellow')
+                    self.eval_records = self._rebuild_records_from_jsonl()
+                    if self.eval_records:
+                        self.log(f'>> Rebuilt {len(self.eval_records)} records from jsonl.', 'green')
+                    else:
+                        self.log(f'>> Could not rebuild records. Starting fresh.', 'yellow')
+                        self.eval_records = {}
             else:
                 self.log(f'>> Loading existing record fail because no records.pkl is found.')
                 self.eval_records = {}
@@ -221,6 +234,30 @@ class Logger:
                 normalized_key = key
             normalized_records[normalized_key] = value
         self.eval_records = normalized_records
+
+    def _rebuild_records_from_jsonl(self):
+        """Rebuild eval_records from batch_results.jsonl when records.pkl is corrupted."""
+        import json
+        records = {}
+        if not os.path.exists(self.batch_log_file):
+            return records
+        try:
+            with open(self.batch_log_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        batch = json.loads(line)
+                        data_ids = batch.get('data_ids', [])
+                        for did in data_ids:
+                            if did not in records:
+                                records[did] = {}
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as e:
+            self.log(f'>> Error reading batch_results.jsonl: {e}', 'yellow')
+        return records
 
     def get_completed_eval_ids(self):
         completed_ids = set()

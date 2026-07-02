@@ -1885,7 +1885,11 @@ function App() {
               selectedExperimentId={selectedExperimentId}
               detail={experimentDetail}
               activeTab={step7Tab}
-              onSelect={setSelectedExperimentId}
+              onSelect={(experimentId: string) => {
+                setExperimentDetail(null);
+                setExperimentJobLog([]);
+                setSelectedExperimentId(experimentId);
+              }}
               onResume={handleResumeExperiment}
               onRerun={handleRerunExperiment}
               onTabChange={setStep7Tab}

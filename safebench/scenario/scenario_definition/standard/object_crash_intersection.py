@@ -29,6 +29,11 @@ class VehicleTurningRoute(BasicScenario):
         self.ego_max_driven_distance = 500
 
     def initialize_actorsHK(self):
+        if not self.config.other_actors:
+            self.logger.log(f'>> [{self.name}] Skipping: no other_actors configured for this data point', 'yellow')
+            self.other_actors = []
+            self.reference_actor = None
+            return
         other_actor_transform = self.config.other_actors[0].transform
         self.actor_type_list = ['vehicle.diamondback.century']
         self.actor_transform_list = [other_actor_transform]

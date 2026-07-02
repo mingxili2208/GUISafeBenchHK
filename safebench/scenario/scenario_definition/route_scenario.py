@@ -2,6 +2,7 @@
 处理主车生成、构建场景实例、测试评价
 """
 import copy
+import signal as _signal
 import traceback
 import numpy as np
 import carla
@@ -479,6 +480,13 @@ class RouteScenario:
         # Turn off autopilot before destroying background vehicles.
         # Uses signal-based timeout to avoid hanging when the Traffic Manager
         # is non-responsive (can happen after ~3 batch cycles).
+        class _AutopilotTimeout(Exception):
+            pass
+
+        def _alarm_handler(signum, frame):
+            raise _AutopilotTimeout()
+
+        tm_port = CarlaDataProvider._traffic_manager_port
         old_handler = _signal.signal(_signal.SIGALRM, _alarm_handler)
         hung_ids = []
         actor_idx = 0

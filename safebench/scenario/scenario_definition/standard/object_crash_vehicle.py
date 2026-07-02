@@ -42,6 +42,10 @@ class DynamicObjectCrossing(BasicScenario):
         """
         简化版本,不必生成vending machine,直接在触发点位置生成具体场景的walker
         """
+        if not self.config.other_actors:
+            self.other_actors = []
+            self.reference_actor = None
+            return
         # 直接提取行人的生成位置
         actor_spawn_transform = self.config.other_actors[0].transform
         # 定义DynamicObjectCrossing场景中需要生成的对抗actor的类型

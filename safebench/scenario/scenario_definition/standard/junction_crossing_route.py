@@ -39,6 +39,10 @@ class OppositeVehicleRunningRedLight(BasicScenario):
         assert scenario_init_action is None, f'{self.name} should receive [None] action. A wrong scenario policy is used.'
 
     def initialize_actorsHK(self):
+        if not self.config.other_actors:
+            self.other_actors = []
+            self.reference_actor = None
+            return
         first_vehicle_transform = self.config.other_actors[0].transform
 
         self.actor_type_list = ["vehicle.audi.tt"]
@@ -100,6 +104,10 @@ class SignalizedJunctionLeftTurn(BasicScenario):
         self.ego_max_driven_distance = 200
 
     def initialize_actorsHK(self):
+        if not self.config.other_actors:
+            self.other_actors = []
+            self.reference_actor = None
+            return
         first_vehicle_transform = self.config.other_actors[0].transform
         self.actor_transform_list = [first_vehicle_transform]
         self.actor_type_list = ["vehicle.audi.tt"]
@@ -163,6 +171,10 @@ class SignalizedJunctionRightTurn(BasicScenario):
         self.ego_max_driven_distance = 200
 
     def initialize_actorsHK(self):
+        if not self.config.other_actors:
+            self.other_actors = []
+            self.reference_actor = None
+            return
         # create the other vehicle
         first_vehicle_transform = self.config.other_actors[0].transform
 
@@ -216,6 +228,10 @@ class NoSignalJunctionCrossingRoute(BasicScenario):
         self.ego_max_driven_distance = 150
 
     def initialize_actorsHK(self):
+        if not self.config.other_actors:
+            self.other_actors = []
+            self.reference_actor = None
+            return
         self._other_actor_transform = self.config.other_actors[0].transform
         first_vehicle_transform = carla.Transform(
             carla.Location(

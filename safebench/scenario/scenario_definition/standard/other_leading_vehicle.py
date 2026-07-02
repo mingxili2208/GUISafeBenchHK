@@ -34,6 +34,10 @@ class OtherLeadingVehicle(BasicScenario):
 
     # 直接在给定点生成车辆
     def initialize_actorsHK(self):
+        if not self.config.other_actors:
+            self.other_actors = []
+            self.reference_actor = None
+            return
         # 获取前车的路点
         first_vehicle_transform = self.config.other_actors[0].transform
         first_vehicle_waypoint = self._map.get_waypoint(first_vehicle_transform.location)

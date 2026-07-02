@@ -578,7 +578,7 @@ class CarlaRunner:
     # 内存守卫：daemon 线程监控 RSS，超标时强制退出。
     # GUI 后台识别退出码 99 后自动续跑。
     EXIT_WATCHDOG = 99
-    WATCHDOG_THRESHOLD_MB = 4000  # RSS 超过 4GB 触发
+    WATCHDOG_THRESHOLD_MB = 3000  # RSS 超过 3GB 触发（正常 ~1GB, spike ~2.5GB）
     WATCHDOG_INTERVAL = 3         # 每 3 秒检查一次
 
     def _start_memory_watchdog(self):
